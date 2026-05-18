@@ -318,7 +318,88 @@ function DocCard({ doc, tagsData, setTagsData, onOpen, allowTagEdit = true, acti
   );
 }
 
-function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, onWatchDirChanged }) {
+function WatchPathsPanel({
+  open,
+  paths,
+  message,
+  saving,
+  picking,
+  onClose,
+  onChangePath,
+  onAddPath,
+  onReplacePath,
+  onDeletePath,
+  onSave,
+}) {
+  const T = useT();
+  if (!open) return null;
+  return (
+    <div className="watch-paths-backdrop" onMouseDown={onClose}>
+      <div className="watch-paths-panel" onMouseDown={e => e.stopPropagation()}>
+        <div className="watch-paths-head">
+          <div>
+            <div className="watch-paths-title">{T('docs_paths_title')}</div>
+            <div className="watch-paths-hint">{T('docs_paths_hint')}</div>
+          </div>
+          <button className="iconbtn watch-paths-close" onClick={onClose} data-tip={T('confirm_cancel')}>
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+          </button>
+        </div>
+
+        <div className="watch-paths-list">
+          {paths.length === 0 ? (
+            <div className="watch-paths-empty">{T('docs_paths_empty')}</div>
+          ) : paths.map((path, index) => (
+            <div className="watch-path-row" key={index}>
+              <input
+                value={path}
+                onChange={e => onChangePath(index, e.target.value)}
+                onKeyDown={e => e.stopPropagation()}
+                aria-label={T('docs_paths_title')}
+              />
+              <button className="iconbtn" onClick={() => onReplacePath(index)} disabled={picking} data-tip={T('docs_choose_folder')}>
+                <Icon.pencil />
+              </button>
+              <button className="iconbtn watch-path-delete" onClick={() => onDeletePath(index)} data-tip={T('bookmarks_remove')}>
+                <Icon.trash />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {message && <div className="watch-paths-message">{message}</div>}
+
+        <div className="watch-paths-actions">
+          <button className="iconbtn" onClick={onAddPath} disabled={picking}>
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><path d="M7 2v10M2 7h10"/></svg>
+            {T('docs_add_path')}
+          </button>
+          <span className="spacer"></span>
+          <button className="tag-manager-apply primary watch-path-save" onClick={onSave} disabled={saving || paths.filter(p => p.trim()).length === 0}>
+            {saving ? T('search_loading') : T('docs_save_paths')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function _normalizeWatchPath(path) {
+  return (path || '').replace(/\\/g, '/').replace(/\/$/, '');
+}
+
+function _relativeToWatchPaths(filepath, watchPaths) {
+  const fullPath = (filepath || '').replace(/\\/g, '/');
+  const bases = (watchPaths || []).map(_normalizeWatchPath).filter(Boolean);
+  const base = bases.find(base => fullPath === base || fullPath.startsWith(base + '/'));
+  if (!base) return fullPath.split('/').pop();
+  const rel = fullPath.slice(base.length).replace(/^\//, '');
+  if (bases.length <= 1) return rel;
+  const rootName = base.split('/').filter(Boolean).pop() || base;
+  return rel ? `${rootName}/${rel}` : rootName;
+}
+
+function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, watchedDirs, onWatchDirChanged }) {
   const T = useT();
   const lang = React.useContext(LangCtx);
   const confirm = useConfirm();
@@ -327,6 +408,10 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, onWatchDirCh
   const [refreshing, setRefreshing] = React.useState(false);
   const [choosingFolder, setChoosingFolder] = React.useState(false);
   const [watchFolderMessage, setWatchFolderMessage] = React.useState('');
+  const [watchPathsOpen, setWatchPathsOpen] = React.useState(false);
+  const [watchPaths, setWatchPaths] = React.useState(watchedDirs && watchedDirs.length ? watchedDirs : (watchedDir ? [watchedDir] : []));
+  const [draftWatchPaths, setDraftWatchPaths] = React.useState(watchPaths);
+  const [savingWatchPaths, setSavingWatchPaths] = React.useState(false);
   const [viewMode, setViewMode] = React.useState('explorer');
   const [tagMode, setTagMode] = React.useState('manual');
   const [tagApplyMessage, setTagApplyMessage] = React.useState('');
@@ -356,6 +441,12 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, onWatchDirCh
   React.useEffect(() => {
     fetchDocs().finally(() => setLoading(false));
   }, [fetchDocs]);
+
+  React.useEffect(() => {
+    const next = watchedDirs && watchedDirs.length ? watchedDirs : (watchedDir ? [watchedDir] : []);
+    setWatchPaths(next);
+    if (!watchPathsOpen) setDraftWatchPaths(next);
+  }, [watchedDir, JSON.stringify(watchedDirs || []), watchPathsOpen]);
 
   // Unconditional polling while DocumentsView is mounted. /api/progress is
   // cheap (a single in-memory dict snapshot) and polling unconditionally
@@ -398,43 +489,100 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, onWatchDirCh
     }
   }, [refreshing, fetchDocs]);
 
-  const handleChooseFolder = React.useCallback(async () => {
+  const pickWatchFolder = React.useCallback(async () => {
+    const pickRes = await fetch('/api/watch-folder/pick', { method: 'POST' });
+    const pickData = await pickRes.json().catch(() => ({}));
+    if (!pickRes.ok) throw new Error(pickData.detail || T('docs_watch_pick_failed'));
+    if (pickData.cancelled || !pickData.path) return '';
+    return pickData.path;
+  }, [T]);
+
+  const openWatchPathsPanel = React.useCallback(async () => {
+    setWatchPathsOpen(true);
+    setWatchFolderMessage('');
+    try {
+      const res = await fetch('/api/watch-folders');
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && Array.isArray(data.paths)) {
+        setWatchPaths(data.paths);
+        setDraftWatchPaths(data.paths);
+      }
+    } catch(e) {}
+  }, []);
+
+  const handleAddWatchPath = React.useCallback(async () => {
     if (choosingFolder) return;
     setChoosingFolder(true);
     setWatchFolderMessage('');
     try {
-      const pickRes = await fetch('/api/watch-folder/pick', { method: 'POST' });
-      const pickData = await pickRes.json().catch(() => ({}));
-      if (!pickRes.ok) throw new Error(pickData.detail || T('docs_watch_pick_failed'));
-      if (pickData.cancelled || !pickData.path) return;
-
-      const choice = await confirm(T('docs_watch_folder_confirm', { path: pickData.path }), {
-        title: T('docs_watch_folder_title'),
-        actions: [
-          { label: T('docs_watch_keep'), value: 'keep' },
-          { label: T('docs_watch_clear'), value: 'clear', danger: true },
-          { label: T('confirm_cancel'), value: null, cancel: true },
-        ],
+      const path = await pickWatchFolder();
+      if (!path) return;
+      setDraftWatchPaths(current => {
+        const exists = current.some(p => _normalizeWatchPath(p).toLowerCase() === _normalizeWatchPath(path).toLowerCase());
+        return exists ? current : [...current, path];
       });
-      if (!choice) return;
-
-      const applyRes = await fetch('/api/watch-folder/apply', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: pickData.path, clear_existing: choice === 'clear' }),
-      });
-      const applyData = await applyRes.json().catch(() => ({}));
-      if (!applyRes.ok) throw new Error(applyData.detail || T('docs_watch_apply_failed'));
-
-      if (onWatchDirChanged) await onWatchDirChanged();
-      await fetchDocs();
-      setWatchFolderMessage(T('docs_watch_folder_changed'));
     } catch(e) {
       setWatchFolderMessage(e.message || T('docs_watch_apply_failed'));
     } finally {
       setChoosingFolder(false);
     }
-  }, [choosingFolder, confirm, T, fetchDocs, onWatchDirChanged]);
+  }, [choosingFolder, pickWatchFolder, T]);
+
+  const handleReplaceWatchPath = React.useCallback(async (index) => {
+    if (choosingFolder) return;
+    setChoosingFolder(true);
+    setWatchFolderMessage('');
+    try {
+      const path = await pickWatchFolder();
+      if (!path) return;
+      setDraftWatchPaths(current => current.map((p, i) => i === index ? path : p));
+    } catch(e) {
+      setWatchFolderMessage(e.message || T('docs_watch_apply_failed'));
+    } finally {
+      setChoosingFolder(false);
+    }
+  }, [choosingFolder, pickWatchFolder, T]);
+
+  const handleDeleteWatchPath = React.useCallback(async (index) => {
+    const path = draftWatchPaths[index] || '';
+    const ok = await confirm(T('docs_delete_path_confirm', { path }), { danger: true });
+    if (!ok) return;
+    setDraftWatchPaths(current => current.filter((_, i) => i !== index));
+  }, [draftWatchPaths, confirm, T]);
+
+  const handleSaveWatchPaths = React.useCallback(async () => {
+    if (savingWatchPaths) return;
+    const clean = [];
+    draftWatchPaths.forEach(path => {
+      const trimmed = path.trim();
+      if (!trimmed) return;
+      const normalized = _normalizeWatchPath(trimmed).toLowerCase();
+      if (!clean.some(p => _normalizeWatchPath(p).toLowerCase() === normalized)) clean.push(trimmed);
+    });
+    if (!clean.length) return;
+
+    setSavingWatchPaths(true);
+    setWatchFolderMessage('');
+    try {
+      const res = await fetch('/api/watch-folders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paths: clean, clear_existing: true }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || T('docs_paths_save_failed'));
+      const next = data.watched_docs_dirs || clean;
+      setWatchPaths(next);
+      setDraftWatchPaths(next);
+      if (onWatchDirChanged) await onWatchDirChanged();
+      await fetchDocs();
+      setWatchFolderMessage(T('docs_paths_saved'));
+    } catch(e) {
+      setWatchFolderMessage(e.message || T('docs_paths_save_failed'));
+    } finally {
+      setSavingWatchPaths(false);
+    }
+  }, [savingWatchPaths, draftWatchPaths, T, onWatchDirChanged, fetchDocs]);
 
   const filtered = React.useMemo(() => {
     let ds = docs;
@@ -548,11 +696,9 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, onWatchDirCh
   }, [tagsData, setTagsData, T, confirm]);
 
   const tree = React.useMemo(() => {
-    const base = watchedDir ? watchedDir.replace(/\\/g, '/').replace(/\/$/, '') + '/' : null;
     const root = { name: T('docs_all_files'), children: {}, files: [] };
     filtered.forEach(doc => {
-      const fullPath = doc.filepath.replace(/\\/g, '/');
-      let rel = (base && fullPath.startsWith(base)) ? fullPath.slice(base.length) : doc.filename;
+      let rel = _relativeToWatchPaths(doc.filepath, watchPaths);
       const parts = rel.split('/'); parts.pop();
       let node = root;
       parts.forEach(part => {
@@ -563,7 +709,11 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, onWatchDirCh
       node.files.push(doc);
     });
     return root;
-  }, [filtered, watchedDir, T]);
+  }, [filtered, watchPaths, T]);
+
+  const watchPathLabel = watchPaths.length > 1
+    ? `${watchPaths[0]} +${watchPaths.length - 1}`
+    : (watchPaths[0] || watchedDir || '');
 
   return (
     <IndexProgressCtx.Provider value={indexProgress}>
@@ -576,9 +726,9 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, onWatchDirCh
           <input value={filterText} onChange={e => setFilterText(e.target.value)} placeholder={T('docs_search')} style={{ fontSize: 12 }} />
         </div>
         <span className="spacer"></span>
-        {watchedDir && (
-          <span className="watch-folder-path" title={watchedDir}>
-            {watchedDir}
+        {watchPathLabel && (
+          <span className="watch-folder-path" title={watchPaths.join('\n')}>
+            {watchPathLabel}
           </span>
         )}
         {watchFolderMessage && (
@@ -588,13 +738,13 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, onWatchDirCh
         )}
         <button
           className="iconbtn"
-          onClick={handleChooseFolder}
+          onClick={openWatchPathsPanel}
           disabled={choosingFolder}
-          data-tip={T('docs_choose_folder')}
+          data-tip={T('docs_manage_paths')}
           style={choosingFolder ? { opacity: 0.6 } : null}
         >
-          <Icon.folder />
-          <span style={{ fontSize: 11 }}>{T('docs_choose_folder')}</span>
+          <Icon.paths />
+          <span style={{ fontSize: 11 }}>{T('docs_manage_paths')}</span>
         </button>
         <button
           className="iconbtn"
@@ -633,6 +783,20 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, onWatchDirCh
           <button className={viewMode === 'explorer' ? 'on' : ''} onClick={() => setViewMode('explorer')} data-tip={T('docs_explorer')}><Icon.tree /></button>
         </div>
       </div>
+
+      <WatchPathsPanel
+        open={watchPathsOpen}
+        paths={draftWatchPaths}
+        message={watchFolderMessage}
+        saving={savingWatchPaths}
+        picking={choosingFolder}
+        onClose={() => setWatchPathsOpen(false)}
+        onChangePath={(index, value) => setDraftWatchPaths(current => current.map((path, i) => i === index ? value : path))}
+        onAddPath={handleAddWatchPath}
+        onReplacePath={handleReplaceWatchPath}
+        onDeletePath={handleDeleteWatchPath}
+        onSave={handleSaveWatchPaths}
+      />
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
         {/* Left tag sidebar */}
@@ -717,7 +881,7 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, onWatchDirCh
 
         {/* Main content */}
         <div className="docs-body" style={{ flex: 1 }}>
-          <IndexingHeader batch={indexProgress.batch} />
+          <IndexingHeader progress={indexProgress} />
           {loading ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}>
               <div style={{ width: 22, height: 22, border: '2px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}/>

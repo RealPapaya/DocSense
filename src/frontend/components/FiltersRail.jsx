@@ -124,16 +124,25 @@ function ExplorerFolderNode({ name, relPath, node, depth, selected, onToggle, ex
   );
 }
 
-function ExplorerFilterGroup({ title, allResults, watchedDir, selected, onToggle, onClear, clearLabel }) {
+function ExplorerFilterGroup({ title, allResults, watchedDir, watchedDirs, selected, onToggle, onClear, clearLabel }) {
   const tree = React.useMemo(() => {
-    const base = watchedDir ? watchedDir.replace(/\\/g, '/').replace(/\/$/, '') + '/' : '';
+    const paths = Array.isArray(watchedDirs) && watchedDirs.length ? watchedDirs : (watchedDir ? [watchedDir] : []);
+    const bases = paths.map(path => path.replace(/\\/g, '/').replace(/\/$/, '')).filter(Boolean);
     const root = { children: {}, files: [], count: 0 };
     const seenPaths = new Set();
     allResults.forEach(r => {
       const fp = (r.filepath || '').replace(/\\/g, '/');
       if (!fp || seenPaths.has(fp)) return;
       seenPaths.add(fp);
-      const rel = (base && fp.startsWith(base)) ? fp.slice(base.length) : fp;
+      const base = bases.find(base => fp === base || fp.startsWith(base + '/'));
+      let rel = fp;
+      if (base) {
+        rel = fp.slice(base.length).replace(/^\//, '');
+        if (bases.length > 1) {
+          const rootName = base.split('/').filter(Boolean).pop() || base;
+          rel = rel ? `${rootName}/${rel}` : rootName;
+        }
+      }
       const parts = rel.split('/');
       const fileName = parts.pop();
       let node = root;
@@ -147,7 +156,7 @@ function ExplorerFilterGroup({ title, allResults, watchedDir, selected, onToggle
       if (fileName) node.files.push({ name: fileName });
     });
     return root;
-  }, [allResults, watchedDir]);
+  }, [allResults, watchedDir, watchedDirs]);
 
   const childEntries = Object.entries(tree.children).sort(([a],[b]) => a.localeCompare(b));
   const rootFiles = tree.files.slice().sort((a, b) => a.name.localeCompare(b.name));
@@ -212,7 +221,7 @@ function ExplorerFilterGroup({ title, allResults, watchedDir, selected, onToggle
   );
 }
 
-function FiltersRail({ filters, setFilters, allResults, tagsData, watchedDir }) {
+function FiltersRail({ filters, setFilters, allResults, tagsData, watchedDir, watchedDirs }) {
   const T = useT();
   const { types, counts } = React.useMemo(() => {
     const c = { type: {} };
@@ -244,6 +253,7 @@ function FiltersRail({ filters, setFilters, allResults, tagsData, watchedDir }) 
         title={T('f_explorer')}
         allResults={allResults}
         watchedDir={watchedDir}
+        watchedDirs={watchedDirs}
         selected={filters.folder || []}
         onToggle={id => toggle('folder', id)}
         onClear={() => clear('folder')}

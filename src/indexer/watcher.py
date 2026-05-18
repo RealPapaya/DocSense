@@ -32,7 +32,7 @@ from watchdog.events import (
     FileDeletedEvent,
 )
 
-from app.watch_settings import get_watched_docs_dir
+from app.watch_settings import get_watched_docs_dirs
 from indexer.extractor import SUPPORTED_EXTENSIONS
 from indexer.pipeline import index_file
 from app.services.fts import delete_document
@@ -55,11 +55,14 @@ def _doc_id_from_path(filepath: str) -> str:
 
 
 def _is_in_current_watch_dir(path: Path) -> bool:
-    try:
-        path.resolve().relative_to(get_watched_docs_dir())
-        return True
-    except ValueError:
-        return False
+    resolved = path.resolve()
+    for directory in get_watched_docs_dirs():
+        try:
+            resolved.relative_to(directory)
+            return True
+        except ValueError:
+            continue
+    return False
 
 
 # ── Background worker ─────────────────────────────────────────────────────────
@@ -208,7 +211,7 @@ class _DocEventHandler(FileSystemEventHandler):
 def start_watcher(directory: Path | None = None) -> Observer:
     """Start the watchdog observer + the indexing worker thread."""
     global _worker
-    watch_dir = Path(directory or get_watched_docs_dir())
+    watch_dir = Path(directory or get_watched_docs_dirs()[0])
     watch_dir.mkdir(parents=True, exist_ok=True)
 
     if _worker is None:

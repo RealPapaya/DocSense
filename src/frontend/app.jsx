@@ -302,14 +302,25 @@ function App() {
   }, [query, mode, searchView, wholeWord, matchCase, relatedTerms, loadingMore, summary, results.length, buildSearchUrl]);
 
   const watchedDir = status.watched_docs_dir || '';
+  const watchedDirs = Array.isArray(status.watched_docs_dirs) && status.watched_docs_dirs.length
+    ? status.watched_docs_dirs
+    : (watchedDir ? [watchedDir] : []);
   const filtered = React.useMemo(() => {
-    const base = watchedDir ? watchedDir.replace(/\\/g, '/').replace(/\/$/, '') + '/' : '';
+    const bases = watchedDirs.map(path => path.replace(/\\/g, '/').replace(/\/$/, '')).filter(Boolean);
     let rs = allResults.filter(r => {
       if (filters.vendor.length && !filters.vendor.includes(r.vendor)) return false;
       if (filters.type.length   && filters.type.includes(r.type))      return false;
       if (filters.folder && filters.folder.length) {
         const fp = (r.filepath || '').replace(/\\/g, '/');
-        const rel = (base && fp.startsWith(base)) ? fp.slice(base.length) : fp;
+        const base = bases.find(base => fp === base || fp.startsWith(base + '/'));
+        let rel = fp;
+        if (base) {
+          rel = fp.slice(base.length).replace(/^\//, '');
+          if (bases.length > 1) {
+            const rootName = base.split('/').filter(Boolean).pop() || base;
+            rel = rel ? `${rootName}/${rel}` : rootName;
+          }
+        }
         const excluded = filters.folder.some(prefix => prefix === '' ? true : (rel === prefix || rel.startsWith(prefix + '/')));
         if (excluded) return false;
       }
@@ -331,7 +342,7 @@ function App() {
       else                    rs = [...rs].sort((a, b) => b.score - a.score);
     }
     return rs;
-  }, [filters, sortKey, allResults, tagsData, watchedDir, summary.view]);
+  }, [filters, sortKey, allResults, tagsData, watchedDirs, summary.view]);
 
   React.useEffect(() => {
     if (filtered.length && !filtered.find(r => r.id === selectedId)) {
@@ -379,6 +390,7 @@ function App() {
               tagsData={tagsData}
               setTagsData={setTagsData}
               watchedDir={watchedDir}
+              watchedDirs={watchedDirs}
               onWatchDirChanged={refreshStatus}
             />
           ) : inBookmarks ? (
@@ -408,7 +420,7 @@ function App() {
             </div>
           ) : (
             <>
-              <FiltersRail filters={filters} setFilters={setFilters} allResults={allResults} tagsData={tagsData} watchedDir={watchedDir} />
+              <FiltersRail filters={filters} setFilters={setFilters} allResults={allResults} tagsData={tagsData} watchedDir={watchedDir} watchedDirs={watchedDirs} />
               <div className="resizer" onMouseDown={onResizerMouseDown}>
                 <div ref={resizerPillRef} className="resizer-pill" />
               </div>

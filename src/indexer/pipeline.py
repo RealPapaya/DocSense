@@ -17,7 +17,7 @@ import threading
 from pathlib import Path
 from typing import Iterable, List, Tuple
 
-from app.watch_settings import get_watched_docs_dir
+from app.watch_settings import get_watched_docs_dirs
 from app.services.embedder import embed
 from app.services import qdrant_store as qs
 from app.services.fts import (
@@ -286,9 +286,18 @@ def _consume(
         lock.release()
 
 
+def _iter_supported_files(directory: Path):
+    for path in directory.rglob("*"):
+        if not path.is_file() or path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+            continue
+        if _is_junk_filename(path.name):
+            continue
+        yield path
+
+
 def index_all(directory: Path | None = None) -> Tuple[int, int]:
     """
-    Index all supported documents in *directory* (default: WATCHED_DOCS_DIR).
+    Index all supported documents in *directory* (default: all watched dirs).
 
     Pre-filters using the mtime cache so the batch counter reflects only the
     files that actually need work. Extraction runs in a background thread so
@@ -296,24 +305,29 @@ def index_all(directory: Path | None = None) -> Tuple[int, int]:
 
     Returns (files_indexed, files_skipped).
     """
-    directory = Path(directory or get_watched_docs_dir())
+    directories = [Path(directory)] if directory is not None else get_watched_docs_dirs()
     mtime_cache = get_all_documents_mtimes()
 
     todo: List[Path] = []
     skipped = 0
-    for path in directory.rglob("*"):
-        if not path.is_file() or path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+    seen: set[str] = set()
+    for directory in directories:
+        directory = Path(directory)
+        if not directory.is_dir():
             continue
-        if _is_junk_filename(path.name):
-            continue
-        # Resolve once so the doc_id we emit to progress matches the one
-        # /api/documents derives from resolve()'d paths; otherwise the
-        # frontend can't map per-file progress back to its rows.
-        resolved = path.resolve()
-        if _needs_index(resolved, mtime_cache):
-            todo.append(resolved)
-        else:
-            skipped += 1
+        for path in _iter_supported_files(directory):
+            # Resolve once so the doc_id we emit to progress matches the one
+            # /api/documents derives from resolve()'d paths; otherwise the
+            # frontend can't map per-file progress back to its rows.
+            resolved = path.resolve()
+            key = str(resolved)
+            if key in seen:
+                continue
+            seen.add(key)
+            if _needs_index(resolved, mtime_cache):
+                todo.append(resolved)
+            else:
+                skipped += 1
 
     if not todo:
         return 0, skipped

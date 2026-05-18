@@ -22,7 +22,12 @@ from app.services.qdrant_store import collection_point_count
 from app.services.qdrant_store import delete_doc
 from app.services.fts import delete_document
 from app.watch_runtime import restart_current_watcher
-from app.watch_settings import get_watched_docs_dir, save_watched_docs_dir
+from app.watch_settings import (
+    get_watched_docs_dir,
+    get_watched_docs_dirs,
+    save_watched_docs_dir,
+    save_watched_docs_dirs,
+)
 from app.perf_settings import (
     VALID_MODES as PERF_MODES,
     get_params as get_perf_params,
@@ -41,6 +46,11 @@ class WatchFolderApplyRequest(BaseModel):
     clear_existing: bool = False
 
 
+class WatchFoldersApplyRequest(BaseModel):
+    paths: list[str]
+    clear_existing: bool = False
+
+
 def _doc_id(filepath: str) -> str:
     return hashlib.sha256(filepath.encode()).hexdigest()[:16]
 
@@ -53,10 +63,15 @@ def _is_within_directory(filepath: str, directory: Path) -> bool:
         return False
 
 
-def _delete_documents_outside(directory: Path) -> int:
+def _is_within_any_directory(filepath: str, directories: list[Path]) -> bool:
+    return any(_is_within_directory(filepath, directory) for directory in directories)
+
+
+def _delete_documents_outside(directory: Path | list[Path]) -> int:
+    directories = directory if isinstance(directory, list) else [directory]
     deleted = 0
     for doc in get_all_documents():
-        if _is_within_directory(doc["filepath"], directory):
+        if _is_within_any_directory(doc["filepath"], directories):
             continue
         doc_id = doc["doc_id"]
         delete_document(doc_id)
@@ -121,6 +136,7 @@ async def get_status():
         total_chunks=stats["total_chunks"],
         collection_points=collection_point_count(),
         watched_docs_dir=str(get_watched_docs_dir()),
+        watched_docs_dirs=[str(path) for path in get_watched_docs_dirs()],
     )
 
 
@@ -136,38 +152,47 @@ async def list_documents():
         for doc in get_all_documents()
     }
 
-    watched_docs_dir = get_watched_docs_dir()
-    watched_docs_dir.mkdir(parents=True, exist_ok=True)
-    for path in watched_docs_dir.rglob("*"):
-        if not path.is_file() or path.suffix.lower() not in SUPPORTED_EXTENSIONS:
-            continue
-        if _is_junk_filename(path.name):
-            continue
+    seen_paths: set[str] = set()
+    for watched_docs_dir in get_watched_docs_dirs():
+        watched_docs_dir.mkdir(parents=True, exist_ok=True)
+        for path in watched_docs_dir.rglob("*"):
+            if not path.is_file() or path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+                continue
+            if _is_junk_filename(path.name):
+                continue
 
-        resolved = str(path.resolve())
-        try:
-            stat = path.stat()
-        except OSError:
-            continue
+            resolved = str(path.resolve())
+            if resolved in seen_paths:
+                continue
+            seen_paths.add(resolved)
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
 
-        existing = docs_by_path.get(resolved)
-        if existing:
-            if abs((existing.get("modified_at") or 0) - stat.st_mtime) >= 1.0:
-                existing["index_status"] = "pending"
-            continue
+            existing = docs_by_path.get(resolved)
+            if existing:
+                if abs((existing.get("modified_at") or 0) - stat.st_mtime) >= 1.0:
+                    existing["index_status"] = "pending"
+                continue
 
-        docs_by_path[resolved] = {
-            "doc_id": _doc_id(resolved),
-            "filepath": resolved,
-            "filename": path.name,
-            "file_size": stat.st_size,
-            "modified_at": stat.st_mtime,
-            "chunk_count": 0,
-            "index_status": "pending",
-        }
+            docs_by_path[resolved] = {
+                "doc_id": _doc_id(resolved),
+                "filepath": resolved,
+                "filename": path.name,
+                "file_size": stat.st_size,
+                "modified_at": stat.st_mtime,
+                "chunk_count": 0,
+                "index_status": "pending",
+            }
 
     docs = sorted(docs_by_path.values(), key=lambda doc: doc["filepath"])
     return {"documents": docs, "total": len(docs)}
+
+
+@router.get("/watch-folders")
+async def list_watch_folders():
+    return {"paths": [str(path) for path in get_watched_docs_dirs()]}
 
 
 @router.post("/watch-folder/pick")
@@ -217,6 +242,36 @@ async def apply_watch_folder(payload: WatchFolderApplyRequest, background_tasks:
     return {
         "status": "ok",
         "watched_docs_dir": str(watched_docs_dir),
+        "watched_docs_dirs": [str(path) for path in get_watched_docs_dirs()],
+        "cleared": bool(payload.clear_existing),
+    }
+
+
+@router.post("/watch-folders")
+async def apply_watch_folders(payload: WatchFoldersApplyRequest, background_tasks: BackgroundTasks):
+    """Persist watched folders, restart watchdogs, and scan all configured folders."""
+    paths = [Path(path).expanduser() for path in payload.paths if path and path.strip()]
+    if not paths:
+        raise HTTPException(status_code=400, detail="at least one path is required")
+    for path in paths:
+        if not path.is_dir():
+            raise HTTPException(status_code=400, detail=f"path must be an existing directory: {path}")
+
+    watched_docs_dirs = save_watched_docs_dirs(paths)
+    restart_current_watcher()
+
+    if payload.clear_existing:
+        _delete_documents_outside(watched_docs_dirs)
+
+    def _run():
+        indexed, skipped = index_all()
+        logger.info("Watch folders scan complete: %d indexed, %d skipped", indexed, skipped)
+
+    background_tasks.add_task(_run)
+    return {
+        "status": "ok",
+        "watched_docs_dir": str(watched_docs_dirs[0]),
+        "watched_docs_dirs": [str(path) for path in watched_docs_dirs],
         "cleared": bool(payload.clear_existing),
     }
 

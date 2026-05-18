@@ -66,3 +66,4 @@ class StatusResponse(BaseModel):
     total_chunks: int
     collection_points: int
     watched_docs_dir: str
+    watched_docs_dirs: List[str] = Field(default_factory=list)

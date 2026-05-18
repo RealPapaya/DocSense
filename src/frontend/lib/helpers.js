@@ -141,6 +141,8 @@ var Icon = {
   tag:      () => <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 2h5.5l6.5 6.5-5.5 5.5L2 7.5V2z" strokeLinejoin="round"/><circle cx="5" cy="5" r="1" fill="currentColor" stroke="none"/></svg>,
   folder:   () => <svg viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 3.5A1 1 0 0 1 2.5 2.5h3.586a1 1 0 0 1 .707.293l.914.914H13.5a1 1 0 0 1 1 1V12.5a1 1 0 0 1-1 1H2.5a1 1 0 0 1-1-1V3.5z" opacity=".3"/><path d="M1.5 5.5h13v7a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-7z"/></svg>,
   refresh:   () => <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M13.5 6A6 6 0 1 0 12 11.2"/><path d="M13.5 2.5v3.5H10"/></svg>,
+  pencil:    () => <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.8 2.8l2.4 2.4M3 13l3.2-.7 7-7a1.7 1.7 0 0 0-2.4-2.4l-7 7L3 13z"/></svg>,
+  paths:     () => <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 4.5h4l1.2 1.5H13v5.5a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z"/><path d="M5 2.5h4l1.2 1.5H13"/></svg>,
   matchCase:  () => <svg viewBox="0 0 16 16" fill="currentColor"><text x="8" y="12" textAnchor="middle" fontSize="11" fontWeight="700" fontFamily="system-ui, sans-serif">Aa</text></svg>,
   wholeWord:  () => <svg viewBox="0 0 16 16" fill="currentColor"><text x="8" y="11" textAnchor="middle" fontSize="10" fontWeight="700" fontFamily="system-ui, sans-serif">ab</text><rect x="2" y="13" width="12" height="1.4"/></svg>,
 };
