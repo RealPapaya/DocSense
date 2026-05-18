@@ -449,7 +449,7 @@ function App() {
                 onLoadMore={onLoadMore}
                 loadingMore={loadingMore}
               />
-              <div className="resizer" onMouseDown={onPreviewResizerMouseDown}>
+                            <div className="resizer resizer-right" onMouseDown={onPreviewResizerMouseDown}>
                 <div ref={previewPillRef} className="resizer-pill" />
               </div>
               <PreviewPanel result={selected} results={filtered} onSelect={setSelectedId} bookmarks={bookmarks} setBookmarks={setBookmarks} />

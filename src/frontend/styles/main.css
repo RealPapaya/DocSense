@@ -735,6 +735,15 @@ body {
   background: var(--accent);
   transform: translateY(-50%) scaleX(1.5);
 }
+/* Right side resizer: line and pill on the right edge */
+.resizer-right::before {
+  left: auto;
+  right: 0;
+}
+.resizer-right .resizer-pill {
+  left: auto;
+  right: -2px;
+}
 [data-layout="topfilters"] .filters-rail { display: none; }
 [data-layout="topfilters"] .topfilters { display: flex; }
 
