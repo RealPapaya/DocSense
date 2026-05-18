@@ -65,13 +65,17 @@ function SearchRow({
 
   const togglePath = React.useCallback((path) => {
     setPathPrefixes(prev => {
-      if (prev.length === 0) return [path];
       const pathKey = normPath(path);
+      if (prev.length === 0) {
+        // All selected → exclude the clicked one, keep the rest
+        const next = pathOptions.filter(p => normPath(p) !== pathKey);
+        return next.length === pathOptions.length ? [] : next;
+      }
       const exists = prev.some(p => normPath(p) === pathKey);
       const next = exists ? prev.filter(p => normPath(p) !== pathKey) : [...prev, path];
       return next.length === pathOptions.length ? [] : next;
     });
-  }, [setPathPrefixes, pathOptions.length, normPath]);
+  }, [setPathPrefixes, pathOptions, normPath]);
 
   const clearPaths = React.useCallback(() => {
     setPathPrefixes([]);
