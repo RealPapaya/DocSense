@@ -63,17 +63,17 @@ function RelatedTab({ result, results = [], onSelect }) {
         <button className={'iconbtn' + (mode === 'related' ? ' on' : '')} onClick={() => { setMode('related'); setInlineChunk(null); }}>
           {T('related_chunks')} · {relatedChunks.length}
         </button>
-        <button
+                <button
           className={'iconbtn' + (mode === 'other' ? ' on' : '')}
           onClick={() => { setMode('other'); setInlineChunk(null); }}
           style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
         >
-          {T('all_chunks_from')} {result.spec}
+          {T('all_chunks_from')}
         </button>
       </div>
-      {mode === 'other' && (
+            {mode === 'other' && (
         <div style={{ marginBottom: 10, color: 'var(--fg-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-          {T('all_chunks_from')} <strong style={{ color: 'var(--fg)' }}>{result.spec}</strong>
+          <strong style={{ color: 'var(--fg)' }}>{result.spec}</strong>
           <span style={{ marginLeft: 6, color: 'var(--fg-faint)' }}>· {otherChunks.length} {lang === 'zh' ? '段落' : 'chunks'}</span>
         </div>
       )}

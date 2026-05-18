@@ -515,7 +515,7 @@ def action_open_docs() -> None:
 
 def action_exit() -> None:
     if api_responding(timeout=0.3) or port_listening():
-        print(f"\n  {yellow('?')} Stop the running server? [Y/n] ", end="", flush=True)
+        print(f"\n  {yellow('?')} Stop the running server? [Y/N] ", end="", flush=True)
         try:
             ans = input().strip().lower()
         except EOFError:

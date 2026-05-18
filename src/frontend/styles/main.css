@@ -181,7 +181,6 @@ body {
   font-weight: 400;
   padding-left: 10px;
   margin-left: 6px;
-  border-left: 1px solid var(--border);
 }
 .topbar .spacer { flex: 1; }
 .topbar-search {

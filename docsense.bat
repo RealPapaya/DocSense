@@ -170,7 +170,7 @@ echo.
 echo    An internet connection is required for step 2.
 echo.
 set "_OK=y"
-set /p "_OK=    Proceed? [Y/n]: "
+set /p "_OK=    Proceed? [Y/N]: "
 if /i "!_OK!"=="n" (
     echo    Cancelled.
     exit /b 1
