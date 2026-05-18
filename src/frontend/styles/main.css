@@ -2074,7 +2074,7 @@ span.doc-tree-icon {
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
   padding: 20px 22px 16px;
   min-width: 300px;
-  max-width: 420px;
+  max-width: 520px;
   width: 90%;
   animation: slide-up 0.14s ease;
 }
@@ -2096,6 +2096,7 @@ span.doc-tree-icon {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+  flex-wrap: nowrap;
 }
 .confirm-btn {
   height: 30px;
@@ -2106,6 +2107,7 @@ span.doc-tree-icon {
   cursor: pointer;
   border: 1px solid var(--border-strong);
   transition: background 0.1s, border-color 0.1s, color 0.1s;
+  white-space: nowrap;
 }
 .confirm-btn-cancel {
   background: var(--bg);
