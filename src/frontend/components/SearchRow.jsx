@@ -29,16 +29,18 @@ function SearchRow({
   return (
     <div className={'searchrow' + (open ? ' open' : ' closed')} aria-hidden={!open} inert={open ? undefined : ''}>
       <div className="advanced-panel">
-        <div className={'mode segmented view-toggle view-' + view} role="tablist" data-tip={T('view_tip')}>
+                <div className={'mode segmented view-toggle view-' + view} role="tablist">
           <button
             className={view === 'documents' ? 'active' : ''}
             onClick={() => setView('documents')}
+            data-tip={T('view_documents_tip')}
           >
             <span className="mdot"></span>{T('view_documents')}
           </button>
           <button
             className={view === 'occurrences' ? 'active' : ''}
             onClick={() => setView('occurrences')}
+            data-tip={T('view_occurrences_tip')}
           >
             <span className="mdot"></span>{T('view_occurrences')}
           </button>

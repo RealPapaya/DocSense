@@ -163,13 +163,13 @@ function ExplorerFilterGroup({ title, allResults, watchedDir, selected, onToggle
         <span className="exf-actions">
           {hasFolders && (
             <>
-              <span className="exf-action" onClick={expandAll} title="Expand all">
+                            <span className="exf-action" onClick={expandAll} data-tip="Expand all">
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
                   <rect x="1.5" y="1.5" width="9" height="9" rx="1.5"/>
                   <path d="M3.5 6h5M6 3.5v5"/>
                 </svg>
               </span>
-              <span className="exf-action" onClick={collapseAll} title="Collapse all">
+              <span className="exf-action" onClick={collapseAll} data-tip="Collapse all">
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
                   <rect x="1.5" y="1.5" width="9" height="9" rx="1.5"/>
                   <path d="M3.5 6h5"/>
