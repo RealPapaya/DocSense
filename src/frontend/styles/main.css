@@ -708,24 +708,32 @@ body {
   top: 0;
   bottom: 0;
   left: 0;
-  width: 100%;
+  width: 1px;
+  background: transparent;
+  transition: background 0.15s;
+  z-index: 0;
+}
+.resizer:hover::before {
+  background: var(--accent);
 }
 .resizer-pill {
   position: absolute;
-  left: 50%;
+  left: -2px;
+  top: 50%;
   width: 4px;
-  height: 28px;
-  border-radius: 4px;
+  height: 32px;
+  border-radius: 2px;
   background: transparent;
   cursor: col-resize;
-  transform: translateX(-50%);
+  transform: translateY(-50%);
   transition: background 0.15s, transform 0.15s;
   pointer-events: none;
+  z-index: 1;
 }
 .resizer:hover .resizer-pill,
 .resizer-pill.dragging {
   background: var(--accent);
-  transform: translateX(-50%) scaleX(1.5);
+  transform: translateY(-50%) scaleX(1.5);
 }
 [data-layout="topfilters"] .filters-rail { display: none; }
 [data-layout="topfilters"] .topfilters { display: flex; }
