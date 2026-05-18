@@ -139,7 +139,7 @@ def index_file(path: Path, known_mtime: float | None = None) -> Tuple[bool, str]
 def _index_locked(path: Path, doc_id: str, filepath: str) -> Tuple[bool, str]:
     """Body of index_file once the per-path lock is held."""
     try:
-        progress.set_progress(doc_id, 5, phase="extract", filename=path.name)
+        progress.set_progress(doc_id, 5, phase="extract", filename=path.name, filepath=filepath)
         stat = path.stat()
 
         def _page_cb(done: int, total: int) -> None:
@@ -184,7 +184,7 @@ def _index_locked(path: Path, doc_id: str, filepath: str) -> Tuple[bool, str]:
         insert_chunks(doc_id, chunks)
         qs.upsert_chunks(doc_id, chunks, vectors)
 
-        progress.mark_done(doc_id, filename=path.name)
+        progress.mark_done(doc_id, filename=path.name, filepath=filepath)
         logger.info("Indexed %s — %d chunks", path.name, len(chunks))
         return True, "indexed"
 
@@ -212,7 +212,13 @@ def _extract_worker(
             break
         doc_id = _doc_id(str(path))
         try:
-            progress.set_progress(doc_id, 5, phase="extract", filename=path.name)
+            progress.set_progress(
+                doc_id,
+                5,
+                phase="extract",
+                filename=path.name,
+                filepath=str(path),
+            )
 
             def _page_cb(done: int, total: int, _id=doc_id) -> None:
                 if total <= 0:
@@ -252,7 +258,7 @@ def _consume(
         progress.clear_progress(doc_id)
         return False
     try:
-        progress.set_progress(doc_id, 40, phase="embed", filename=path.name)
+        progress.set_progress(doc_id, 40, phase="embed", filename=path.name, filepath=filepath)
         texts = [c["text"] for c in chunks]
 
         def _embed_cb(done: int, total: int, _id=doc_id) -> None:
@@ -275,7 +281,7 @@ def _consume(
         )
         insert_chunks(doc_id, chunks)
         qs.upsert_chunks(doc_id, chunks, vectors)
-        progress.mark_done(doc_id, filename=path.name)
+        progress.mark_done(doc_id, filename=path.name, filepath=filepath)
         logger.info("Indexed %s — %d chunks", path.name, len(chunks))
         return True
     except Exception as exc:

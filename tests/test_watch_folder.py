@@ -177,3 +177,92 @@ def test_delete_documents_outside_keeps_all_watch_folder_docs(tmp_path, monkeypa
     assert deleted == 1
     assert deleted_sql == ["drop"]
     assert deleted_qdrant == ["drop"]
+
+
+def test_filter_progress_hides_active_batch_outside_current_watch_paths(tmp_path):
+    keep = tmp_path / "keep"
+    old = tmp_path / "old"
+    keep.mkdir()
+    old.mkdir()
+    old_file = old / "indexing.pdf"
+
+    state = {
+        "files": {
+            "drop": {
+                "pct": 40,
+                "phase": "embed",
+                "filename": old_file.name,
+                "filepath": str(old_file),
+            },
+        },
+        "batch": {
+            "active": True,
+            "total": 1,
+            "completed": 0,
+            "current_file": old_file.name,
+            "current_filepath": str(old_file),
+            "current_phase": "embed",
+            "started_at": 1,
+            "finished_at": None,
+        },
+    }
+
+    filtered = index_route._filter_progress_for_watch_dirs(state, [keep])
+
+    assert filtered["files"] == {}
+    assert filtered["batch"]["active"] is False
+    assert filtered["batch"]["total"] == 0
+
+
+def test_filter_progress_keeps_active_batch_inside_current_watch_paths(tmp_path):
+    keep = tmp_path / "keep"
+    keep.mkdir()
+    keep_file = keep / "indexing.pdf"
+
+    state = {
+        "files": {
+            "keep": {
+                "pct": 40,
+                "phase": "embed",
+                "filename": keep_file.name,
+                "filepath": str(keep_file),
+            },
+        },
+        "batch": {
+            "active": True,
+            "total": 1,
+            "completed": 0,
+            "current_file": keep_file.name,
+            "current_filepath": str(keep_file),
+            "current_phase": "embed",
+            "started_at": 1,
+            "finished_at": None,
+        },
+    }
+
+    filtered = index_route._filter_progress_for_watch_dirs(state, [keep])
+
+    assert list(filtered["files"]) == ["keep"]
+    assert filtered["batch"]["active"] is True
+
+
+def test_inflight_doc_ids_outside_paths_uses_progress_filepath(tmp_path, monkeypatch):
+    keep = tmp_path / "keep"
+    old = tmp_path / "old"
+    keep.mkdir()
+    old.mkdir()
+
+    monkeypatch.setattr(
+        index_route,
+        "get_progress_state",
+        lambda: {
+            "files": {
+                "keep": {"pct": 20, "filepath": str(keep / "keep.pdf")},
+                "drop": {"pct": 20, "filepath": str(old / "drop.pdf")},
+                "done": {"pct": 100, "filepath": str(old / "done.pdf")},
+            },
+            "batch": {"active": True},
+        },
+    )
+
+    assert index_route._inflight_doc_ids_outside_paths([keep]) == {"drop"}

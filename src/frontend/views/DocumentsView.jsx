@@ -489,8 +489,12 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, watchedDirs,
     }
   }, [refreshing, fetchDocs]);
 
-  const pickWatchFolder = React.useCallback(async () => {
-    const pickRes = await fetch('/api/watch-folder/pick', { method: 'POST' });
+  const pickWatchFolder = React.useCallback(async (startDir) => {
+    const pickRes = await fetch('/api/watch-folder/pick', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ start_dir: startDir || '' }),
+    });
     const pickData = await pickRes.json().catch(() => ({}));
     if (!pickRes.ok) throw new Error(pickData.detail || T('docs_watch_pick_failed'));
     if (pickData.cancelled || !pickData.path) return '';
@@ -510,30 +514,17 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, watchedDirs,
     } catch(e) {}
   }, []);
 
-  const handleAddWatchPath = React.useCallback(async () => {
-    if (choosingFolder) return;
-    setChoosingFolder(true);
-    setWatchFolderMessage('');
-    try {
-      const path = await pickWatchFolder();
-      if (!path) return;
-      setDraftWatchPaths(current => {
-        const exists = current.some(p => _normalizeWatchPath(p).toLowerCase() === _normalizeWatchPath(path).toLowerCase());
-        return exists ? current : [...current, path];
-      });
-    } catch(e) {
-      setWatchFolderMessage(e.message || T('docs_watch_apply_failed'));
-    } finally {
-      setChoosingFolder(false);
-    }
-  }, [choosingFolder, pickWatchFolder, T]);
+  const handleAddWatchPath = React.useCallback(() => {
+    setDraftWatchPaths(current => [...current, '']);
+  }, []);
 
   const handleReplaceWatchPath = React.useCallback(async (index) => {
     if (choosingFolder) return;
     setChoosingFolder(true);
     setWatchFolderMessage('');
     try {
-      const path = await pickWatchFolder();
+      const currentPath = draftWatchPaths[index] || '';
+      const path = await pickWatchFolder(currentPath);
       if (!path) return;
       setDraftWatchPaths(current => current.map((p, i) => i === index ? path : p));
     } catch(e) {
@@ -541,7 +532,7 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, watchedDirs,
     } finally {
       setChoosingFolder(false);
     }
-  }, [choosingFolder, pickWatchFolder, T]);
+  }, [choosingFolder, draftWatchPaths, pickWatchFolder, T]);
 
   const handleDeleteWatchPath = React.useCallback(async (index) => {
     const path = draftWatchPaths[index] || '';

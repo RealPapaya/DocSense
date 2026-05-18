@@ -20,12 +20,13 @@ DONE_LINGER_SEC = 1.5
 BATCH_LINGER_SEC = 2.5
 
 _lock = threading.Lock()
-_files: dict[str, dict] = {}  # doc_id -> {pct, phase, filename}
+_files: dict[str, dict] = {}  # doc_id -> {pct, phase, filename, filepath}
 _batch: dict = {
     "active": False,
     "total": 0,
     "completed": 0,
     "current_file": None,
+    "current_filepath": None,
     "current_phase": None,
     "started_at": None,
     "finished_at": None,
@@ -37,6 +38,7 @@ def set_progress(
     pct: int,
     phase: str | None = None,
     filename: str | None = None,
+    filepath: str | None = None,
 ) -> None:
     """Update per-file progress and the batch's ``current_*`` fields."""
     pct = max(0, min(100, int(pct)))
@@ -47,17 +49,27 @@ def set_progress(
             entry["phase"] = phase
         if filename is not None:
             entry["filename"] = filename
+        if filepath is not None:
+            entry["filepath"] = filepath
         _files[doc_id] = entry
         if _batch["active"]:
             if filename is not None:
                 _batch["current_file"] = filename
             elif "filename" in entry:
                 _batch["current_file"] = entry["filename"]
+            if filepath is not None:
+                _batch["current_filepath"] = filepath
+            elif "filepath" in entry:
+                _batch["current_filepath"] = entry["filepath"]
             if phase is not None:
                 _batch["current_phase"] = phase
 
 
-def mark_done(doc_id: str, filename: str | None = None) -> None:
+def mark_done(
+    doc_id: str,
+    filename: str | None = None,
+    filepath: str | None = None,
+) -> None:
     """Set the file to 100% and schedule its removal after a short linger."""
     with _lock:
         entry = _files.get(doc_id, {})
@@ -65,6 +77,8 @@ def mark_done(doc_id: str, filename: str | None = None) -> None:
         entry["phase"] = "done"
         if filename is not None:
             entry["filename"] = filename
+        if filepath is not None:
+            entry["filepath"] = filepath
         _files[doc_id] = entry
 
     def _drop() -> None:
@@ -97,6 +111,7 @@ def start_batch(total: int) -> None:
             total=int(total),
             completed=0,
             current_file=None,
+            current_filepath=None,
             current_phase=None,
             started_at=time.time(),
             finished_at=None,
@@ -120,6 +135,7 @@ def finish_batch() -> None:
         _batch["active"] = False
         _batch["finished_at"] = time.time()
         _batch["current_phase"] = None
+        _batch["current_filepath"] = None
 
     def _reset() -> None:
         with _lock:
@@ -129,6 +145,7 @@ def finish_batch() -> None:
                 total=0,
                 completed=0,
                 current_file=None,
+                current_filepath=None,
                 current_phase=None,
                 started_at=None,
                 finished_at=None,
@@ -148,6 +165,7 @@ def clear_progress_for_doc_ids(doc_ids: set[str]) -> None:
         if not still_inflight and _batch["active"]:
             _batch["active"] = False
             _batch["finished_at"] = None
+            _batch["current_filepath"] = None
 
 
 def get_state() -> dict:

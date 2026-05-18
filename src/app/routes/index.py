@@ -83,6 +83,89 @@ def _delete_documents_outside(directory: Path | list[Path]) -> int:
     return deleted
 
 
+def _empty_progress_batch() -> dict:
+    return {
+        "active": False,
+        "total": 0,
+        "completed": 0,
+        "current_file": None,
+        "current_filepath": None,
+        "current_phase": None,
+        "started_at": None,
+        "finished_at": None,
+    }
+
+
+def _filter_progress_for_watch_dirs(state: dict, directories: list[Path]) -> dict:
+    """Hide stale in-flight progress for files outside the current watched roots."""
+    files = state.get("files") or {}
+    filtered_files = {
+        doc_id: entry
+        for doc_id, entry in files.items()
+        if not entry.get("filepath") or _is_within_any_directory(entry["filepath"], directories)
+    }
+    batch = dict(state.get("batch") or {})
+    current_filepath = batch.get("current_filepath")
+    visible_inflight = any(entry.get("pct", 0) < 100 for entry in filtered_files.values())
+
+    if batch.get("active"):
+        current_is_outside = current_filepath and not _is_within_any_directory(
+            current_filepath,
+            directories,
+        )
+        if current_is_outside and visible_inflight:
+            current = next(
+                entry for entry in filtered_files.values() if entry.get("pct", 0) < 100
+            )
+            batch["current_file"] = current.get("filename")
+            batch["current_filepath"] = current.get("filepath")
+            batch["current_phase"] = current.get("phase")
+        elif (current_is_outside and not visible_inflight) or (files and not filtered_files):
+            batch = _empty_progress_batch()
+    elif batch.get("finished_at") and not filtered_files:
+        batch = _empty_progress_batch()
+
+    return {"files": filtered_files, "batch": batch}
+
+
+def _inflight_doc_ids_outside_paths(directories: list[Path]) -> set[str]:
+    """Return active progress entries that no longer belong to watched roots."""
+    state = get_progress_state()
+    outside_ids: set[str] = set()
+    unknown_ids: set[str] = set()
+
+    for doc_id, entry in (state.get("files") or {}).items():
+        if entry.get("pct", 0) >= 100:
+            continue
+        filepath = entry.get("filepath")
+        if filepath:
+            if not _is_within_any_directory(filepath, directories):
+                outside_ids.add(doc_id)
+        else:
+            unknown_ids.add(doc_id)
+
+    if not unknown_ids:
+        return outside_ids
+
+    con = sqlite3.connect(str(DB_PATH))
+    try:
+        rows = con.execute(
+            "SELECT doc_id, filepath FROM documents WHERE doc_id IN ({})".format(
+                ",".join("?" * len(unknown_ids))
+            ),
+            list(unknown_ids),
+        ).fetchall()
+    finally:
+        con.close()
+
+    outside_ids.update(
+        doc_id
+        for doc_id, filepath in rows
+        if not _is_within_any_directory(filepath, directories)
+    )
+    return outside_ids
+
+
 @router.post("/index", response_model=IndexResponse)
 async def trigger_index(background_tasks: BackgroundTasks):
     """
@@ -105,7 +188,7 @@ async def trigger_index(background_tasks: BackgroundTasks):
 @router.get("/progress")
 async def get_progress():
     """Return per-file + batch-level indexing progress."""
-    return get_progress_state()
+    return _filter_progress_for_watch_dirs(get_progress_state(), get_watched_docs_dirs())
 
 
 class PerfModeRequest(BaseModel):
@@ -195,8 +278,12 @@ async def list_watch_folders():
     return {"paths": [str(path) for path in get_watched_docs_dirs()]}
 
 
+class WatchFolderPickRequest(BaseModel):
+    start_dir: str = ""
+
+
 @router.post("/watch-folder/pick")
-async def pick_watch_folder():
+async def pick_watch_folder(payload: WatchFolderPickRequest = WatchFolderPickRequest()):
     """Open a native folder picker and return the selected path."""
     try:
         import tkinter as tk
@@ -204,12 +291,16 @@ async def pick_watch_folder():
     except Exception as exc:
         raise HTTPException(status_code=500, detail="native folder picker is unavailable") from exc
 
+    start = Path(payload.start_dir).expanduser() if payload.start_dir.strip() else None
+    if start is None or not start.is_dir():
+        start = get_watched_docs_dir()
+
     try:
         root = tk.Tk()
         root.withdraw()
         root.attributes("-topmost", True)
         selected = filedialog.askdirectory(
-            initialdir=str(get_watched_docs_dir()),
+            initialdir=str(start),
             title="Choose watched folder",
         )
         root.destroy()
@@ -230,6 +321,7 @@ async def apply_watch_folder(payload: WatchFolderApplyRequest, background_tasks:
 
     watched_docs_dir = save_watched_docs_dir(path)
     restart_current_watcher()
+    clear_progress_for_doc_ids(_inflight_doc_ids_outside_paths([watched_docs_dir]))
 
     if payload.clear_existing:
         _delete_documents_outside(watched_docs_dir)
@@ -259,31 +351,7 @@ async def apply_watch_folders(payload: WatchFoldersApplyRequest, background_task
 
     watched_docs_dirs = save_watched_docs_dirs(paths)
     restart_current_watcher()
-
-    # Cancel in-flight progress for files that no longer belong to any watched path.
-    inflight_ids = {
-        doc_id
-        for doc_id, entry in get_progress_state()["files"].items()
-        if entry.get("pct", 0) < 100
-    }
-    if inflight_ids:
-        con = sqlite3.connect(str(DB_PATH))
-        try:
-            rows = con.execute(
-                "SELECT doc_id, filepath FROM documents WHERE doc_id IN ({})".format(
-                    ",".join("?" * len(inflight_ids))
-                ),
-                list(inflight_ids),
-            ).fetchall()
-        finally:
-            con.close()
-        outside_ids = {
-            doc_id
-            for doc_id, filepath in rows
-            if not _is_within_any_directory(filepath, watched_docs_dirs)
-        }
-        if outside_ids:
-            clear_progress_for_doc_ids(outside_ids)
+    clear_progress_for_doc_ids(_inflight_doc_ids_outside_paths(watched_docs_dirs))
 
     if payload.clear_existing:
         _delete_documents_outside(watched_docs_dirs)
