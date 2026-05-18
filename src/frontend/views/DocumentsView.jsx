@@ -76,7 +76,7 @@ function FileActionPanel({ doc, tagsData, setTagsData, onOpen, allowTagEdit = tr
   return (
     <div className="file-action-panel" onClick={e => e.stopPropagation()}>
       {/* Open button */}
-      <button
+            <button
         className="iconbtn"
         onClick={() => { if (canOpen && onOpen) onOpen(doc); }}
         disabled={!canOpen}
@@ -84,8 +84,6 @@ function FileActionPanel({ doc, tagsData, setTagsData, onOpen, allowTagEdit = tr
       >
         <Icon.external /> {T('docs_open')}
       </button>
-
-      {statusLabel && <span className="index-pill pending">{statusLabel}</span>}
 
       {allowTagEdit && (
         <>
@@ -150,9 +148,11 @@ function FileActionPanel({ doc, tagsData, setTagsData, onOpen, allowTagEdit = tr
               />
               <button onClick={() => { createAndAssignTag(); closeTagFlyout('add'); }}>{T('docs_add')}</button>
             </div>
-          </div>
+                    </div>
         </>
       )}
+
+      {statusLabel && <span className="index-pill pending">{statusLabel}</span>}
     </div>
   );
 }
@@ -184,8 +184,11 @@ function ExplorerFileRow({ doc, tagsData, setTagsData, onOpen, allowTagEdit = tr
   );
 }
 
-function ExplorerNode({ name, children, files, depth, tagsData, setTagsData, onOpenFile, allowTagEdit = true, activeTagFlyout, setActiveTagFlyout }) {
+function ExplorerNode({ name, children, files, depth, tagsData, setTagsData, onOpenFile, allowTagEdit = true, activeTagFlyout, setActiveTagFlyout, expandSignal }) {
   const [open, setOpen] = React.useState(depth === 0);
+  React.useEffect(() => {
+    if (expandSignal && expandSignal.version > 0) setOpen(expandSignal.value);
+  }, [expandSignal && expandSignal.version]);
   const childEntries = Object.entries(children).sort(([a],[b]) => a.localeCompare(b));
   const totalCount = _countFiles({ children, files });
   return (
@@ -200,8 +203,8 @@ function ExplorerNode({ name, children, files, depth, tagsData, setTagsData, onO
       </div>
       {open && (
         <div className="explorer-children">
-          {childEntries.map(([n, node]) => (
-            <ExplorerNode key={n} name={n} {...node} depth={depth+1} tagsData={tagsData} setTagsData={setTagsData} onOpenFile={onOpenFile} allowTagEdit={allowTagEdit} activeTagFlyout={activeTagFlyout} setActiveTagFlyout={setActiveTagFlyout} />
+                    {childEntries.map(([n, node]) => (
+            <ExplorerNode key={n} name={n} {...node} depth={depth+1} tagsData={tagsData} setTagsData={setTagsData} onOpenFile={onOpenFile} allowTagEdit={allowTagEdit} activeTagFlyout={activeTagFlyout} setActiveTagFlyout={setActiveTagFlyout} expandSignal={expandSignal} />
           ))}
           {files.map(doc => (
             <ExplorerFileRow key={doc.doc_id} doc={doc} tagsData={tagsData} setTagsData={setTagsData} onOpen={onOpenFile} allowTagEdit={allowTagEdit} activeTagFlyout={activeTagFlyout} setActiveTagFlyout={setActiveTagFlyout} />
@@ -272,8 +275,11 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, onWatchDirCh
   const [newTagColor, setNewTagColor] = React.useState('#6366f1');
   const [addingTag, setAddingTag] = React.useState(false);
   const [activeTagFlyout, setActiveTagFlyout] = React.useState(null);
-  const newTagInputRef = React.useRef(null);
+    const newTagInputRef = React.useRef(null);
   const [filterText, setFilterText] = React.useState('');
+  const [expandSignal, setExpandSignal] = React.useState({ version: 0, value: true });
+  const expandAll = () => setExpandSignal(s => ({ version: s.version + 1, value: true }));
+  const collapseAll = () => setExpandSignal(s => ({ version: s.version + 1, value: false }));
 
   const fetchDocs = React.useCallback(() => {
     return fetch('/api/documents')
@@ -522,9 +528,25 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, onWatchDirCh
           <span style={{ fontSize: 11 }}>{T('docs_refresh')}</span>
         </button>
         <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }}></div>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-faint)' }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-faint)' }}>
           {filtered.length}{docs.length !== filtered.length ? ' / ' + docs.length : ''} {T('docs_files_count')}
         </span>
+        {viewMode === 'explorer' && Object.keys(tree.children).length > 0 && (
+          <>
+            <button className="iconbtn" onClick={expandAll} data-tip="Expand all" style={{ fontSize: 11 }}>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                <rect x="1.5" y="1.5" width="9" height="9" rx="1.5"/>
+                <path d="M3.5 6h5M6 3.5v5"/>
+              </svg>
+            </button>
+            <button className="iconbtn" onClick={collapseAll} data-tip="Collapse all" style={{ fontSize: 11 }}>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                <rect x="1.5" y="1.5" width="9" height="9" rx="1.5"/>
+                <path d="M3.5 6h5"/>
+              </svg>
+            </button>
+          </>
+        )}
         <div className="docs-view-toggle">
           <button className={viewMode === 'list' ? 'on' : ''} onClick={() => setViewMode('list')} data-tip={T('docs_list')}><Icon.rows /></button>
           <button className={viewMode === 'explorer' ? 'on' : ''} onClick={() => setViewMode('explorer')} data-tip={T('docs_explorer')}><Icon.tree /></button>
@@ -627,9 +649,9 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, onWatchDirCh
               </div>
             </div>
           ) : viewMode === 'explorer' ? (
-            <div className="explorer-root">
+                        <div className="explorer-root">
               {Object.entries(tree.children).sort(([a],[b]) => a.localeCompare(b)).map(([n, node]) => (
-                <ExplorerNode key={n} name={n} {...node} depth={0} tagsData={tagsData} setTagsData={setTagsData} onOpenFile={openDoc} allowTagEdit={true} activeTagFlyout={activeTagFlyout} setActiveTagFlyout={setActiveTagFlyout} />
+                <ExplorerNode key={n} name={n} {...node} depth={0} tagsData={tagsData} setTagsData={setTagsData} onOpenFile={openDoc} allowTagEdit={true} activeTagFlyout={activeTagFlyout} setActiveTagFlyout={setActiveTagFlyout} expandSignal={expandSignal} />
               ))}
               {tree.files.map(doc => (
                 <ExplorerFileRow key={doc.doc_id} doc={doc} tagsData={tagsData} setTagsData={setTagsData} onOpen={openDoc} allowTagEdit={true} activeTagFlyout={activeTagFlyout} setActiveTagFlyout={setActiveTagFlyout} />
