@@ -584,6 +584,15 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, watchedDirs,
     }
   }, [savingWatchPaths, draftWatchPaths, T, onWatchDirChanged, fetchDocs]);
 
+  const handleCloseWatchPathsPanel = React.useCallback(async () => {
+    const hasChanges = JSON.stringify(draftWatchPaths) !== JSON.stringify(watchPaths);
+    if (hasChanges) {
+      const ok = await confirm(T('docs_paths_unsaved_confirm'));
+      if (!ok) return;
+    }
+    setWatchPathsOpen(false);
+  }, [draftWatchPaths, watchPaths, confirm, T]);
+
   const filtered = React.useMemo(() => {
     let ds = docs;
     if (filterText.trim()) { const q = filterText.toLowerCase(); ds = ds.filter(d => d.filename.toLowerCase().includes(q) || d.filepath.toLowerCase().includes(q)); }
@@ -790,7 +799,7 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, watchedDirs,
         message={watchFolderMessage}
         saving={savingWatchPaths}
         picking={choosingFolder}
-        onClose={() => setWatchPathsOpen(false)}
+        onClose={handleCloseWatchPathsPanel}
         onChangePath={(index, value) => setDraftWatchPaths(current => current.map((path, i) => i === index ? value : path))}
         onAddPath={handleAddWatchPath}
         onReplacePath={handleReplaceWatchPath}

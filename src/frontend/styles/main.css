@@ -229,6 +229,8 @@ body {
   border-radius: 5px;
   font: inherit;
   font-size: 11.5px;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
   transition: background 0.1s, border-color 0.1s, color 0.1s;
 }
@@ -418,12 +420,14 @@ body {
   font: inherit;
   font-size: 12px;
   font-weight: 500;
+  line-height: 1;
   color: var(--fg-muted);
   padding: 0 12px;
   border-radius: 4px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   white-space: nowrap;
 }
@@ -447,9 +451,12 @@ body {
   font: inherit;
   font-weight: 500;
   font-size: 12.5px;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
 }
 .searchbtn:hover { filter: brightness(1.05); }
@@ -465,7 +472,12 @@ body {
   border-radius: 6px;
   font: inherit;
   font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition: border-color 0.18s ease, color 0.18s ease, background 0.18s ease;
 }
 .advanced-btn::before {
@@ -1994,7 +2006,8 @@ span.doc-tree-icon {
 .fap-add-flyout button {
   height: 26px; padding: 0 10px;
   background: var(--accent); color: white; border: none;
-  border-radius: 4px; font: inherit; font-size: 11.5px; cursor: pointer; white-space: nowrap;
+  border-radius: 4px; font: inherit; font-size: 11.5px; line-height: 1; cursor: pointer; white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
   flex-shrink: 0;
 }
 
@@ -2146,7 +2159,8 @@ span.doc-tree-icon {
 .new-tag-form .add-btn {
   height: 24px; padding: 0 9px;
   background: var(--accent); color: white; border: none;
-  border-radius: 4px; font: inherit; font-size: 11px; cursor: pointer; flex-shrink: 0;
+  border-radius: 4px; font: inherit; font-size: 11px; line-height: 1; cursor: pointer; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center; white-space: nowrap;
 }
 
 .tag-mode-toggle {
@@ -2165,8 +2179,13 @@ span.doc-tree-icon {
   border-radius: 4px;
   font: inherit;
   font-size: 11px;
+  line-height: 1;
   cursor: pointer;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
 }
 .tag-mode-toggle button.on {
   background: var(--accent-soft);
@@ -2182,6 +2201,8 @@ span.doc-tree-icon {
   border-radius: 5px;
   font: inherit;
   font-size: 11.5px;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
   margin-top: 4px;
   display: flex;
@@ -2350,8 +2371,12 @@ span.doc-tree-icon {
   border-radius: 6px;
   font: inherit;
   font-size: 12.5px;
+  line-height: 1;
   cursor: pointer;
   border: 1px solid var(--border-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition: background 0.1s, border-color 0.1s, color 0.1s;
   white-space: nowrap;
 }
@@ -2473,12 +2498,18 @@ span.doc-tree-icon {
 }
 .loadmore-btn {
   font-size: 12px;
+  line-height: 1;
   padding: 6px 14px;
   border-radius: 6px;
   background: var(--bg-elev);
   border: 1px solid var(--border);
   color: var(--fg);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
 }
 .loadmore-btn:hover:not(:disabled) {
   border-color: var(--accent);
