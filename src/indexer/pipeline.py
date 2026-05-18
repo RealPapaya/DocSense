@@ -26,6 +26,7 @@ from app.services.fts import (
     delete_document,
     get_document_by_path,
     get_all_documents_mtimes,
+    get_all_documents,
 )
 from indexer.extractor import extract, SUPPORTED_EXTENSIONS
 from indexer import progress
@@ -372,6 +373,26 @@ def index_all(directory: Path | None = None) -> Tuple[int, int]:
         extractor.join(timeout=5.0)
 
     return indexed, skipped
+
+
+def purge_missing_docs() -> int:
+    """Remove index entries whose files no longer exist on disk.
+
+    Only deletes SQLite rows and Qdrant vectors — never touches user files.
+    Returns the number of entries purged.
+    """
+    purged = 0
+    for doc in get_all_documents():
+        if not Path(doc["filepath"]).is_file():
+            doc_id = doc["doc_id"]
+            logger.info("Purging missing file from index: %s", doc["filepath"])
+            delete_document(doc_id)
+            try:
+                qs.delete_doc(doc_id)
+            except Exception:
+                logger.exception("Failed deleting Qdrant vectors for %s", doc_id)
+            purged += 1
+    return purged
 
 
 def index_paths(paths: Iterable[Path]) -> Tuple[int, int]:

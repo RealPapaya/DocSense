@@ -35,7 +35,7 @@ from app.perf_settings import (
     set_perf_mode,
 )
 from indexer.extractor import SUPPORTED_EXTENSIONS
-from indexer.pipeline import index_all, _is_junk_filename
+from indexer.pipeline import index_all, purge_missing_docs, _is_junk_filename
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -173,6 +173,9 @@ async def trigger_index(background_tasks: BackgroundTasks):
     Returns immediately; indexing runs asynchronously.
     """
     def _run():
+        purged = purge_missing_docs()
+        if purged:
+            logger.info("Purged %d missing-file index entries", purged)
         indexed, skipped = index_all()
         logger.info("Background index complete: %d indexed, %d skipped", indexed, skipped)
 
