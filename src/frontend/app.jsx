@@ -49,15 +49,17 @@ function App() {
     e.preventDefault();
     const startX = e.clientX;
     const startW = railW;
+    let lastW = startW;
     resizerPillRef.current?.classList.add('dragging');
     const onMove = (ev) => {
-      const next = Math.max(140, Math.min(480, startW + ev.clientX - startX));
-      setRailW(next);
+      lastW = Math.max(140, Math.min(480, startW + ev.clientX - startX));
+      document.documentElement.style.setProperty('--rail-w', lastW + 'px');
     };
     const onUp = () => {
       resizerPillRef.current?.classList.remove('dragging');
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
+      setRailW(lastW);
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
@@ -73,15 +75,17 @@ function App() {
     e.preventDefault();
     const startX = e.clientX;
     const startW = previewW;
+    let lastW = startW;
     previewPillRef.current?.classList.add('dragging');
     const onMove = (ev) => {
-      const next = Math.max(300, Math.min(800, startW - (ev.clientX - startX)));
-      setPreviewW(next);
+      lastW = Math.max(300, Math.min(800, startW - (ev.clientX - startX)));
+      document.documentElement.style.setProperty('--preview-w', lastW + 'px');
     };
     const onUp = () => {
       previewPillRef.current?.classList.remove('dragging');
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
+      setPreviewW(lastW);
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
