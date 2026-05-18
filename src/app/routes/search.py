@@ -9,6 +9,7 @@ view          : "documents" | "occurrences"       (default: documents)
 whole_word    : bool                              (default: false)
 match_case    : bool                              (default: false)
 related_terms : repeated string params; OR-expanded with the base query
+path_prefix   : repeated filesystem path prefixes to restrict search scope
 limit         : optional result cap; documents view returns every match when omitted,
                 occurrences view defaults to 200 per page
 offset        : pagination offset (occurrences view only)
@@ -208,6 +209,36 @@ def _dedupe_hits(hits: Iterable[dict]) -> List[dict]:
     return out
 
 
+def _normalize_path_prefixes(path_prefixes: Optional[List[str]]) -> List[str]:
+    prefixes: List[str] = []
+    seen: set[str] = set()
+    for prefix in path_prefixes or []:
+        clean = prefix.strip()
+        if not clean:
+            continue
+        clean = clean.replace("\\", "/").rstrip("/")
+        key = clean.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        prefixes.append(clean)
+    return prefixes
+
+
+def _filter_by_path_prefix(hits: List[dict], path_prefixes: List[str]) -> List[dict]:
+    if not path_prefixes:
+        return hits
+
+    out: List[dict] = []
+    folded_prefixes = [prefix.casefold() for prefix in path_prefixes]
+    for hit in hits:
+        filepath = (hit.get("filepath") or "").replace("\\", "/").rstrip("/")
+        folded = filepath.casefold()
+        if any(folded == prefix or folded.startswith(prefix + "/") for prefix in folded_prefixes):
+            out.append(hit)
+    return out
+
+
 def _recall_queries(q: str, branches: List[List[str]]) -> List[str]:
     queries = [q]
     for branch in branches[1:]:
@@ -278,6 +309,7 @@ async def search(
     whole_word: bool = Query(False, description="Match whole words only"),
     match_case: bool = Query(False, description="Match exact case"),
     related_terms: Optional[List[str]] = Query(None, description="Additional OR terms"),
+    path_prefix: Optional[List[str]] = Query(None, description="Restrict results to path prefixes"),
     limit: Optional[int] = Query(None, ge=1),
     offset: int = Query(0, ge=0),
 ):
@@ -289,9 +321,11 @@ async def search(
         raise HTTPException(status_code=400, detail="view must be documents or occurrences")
 
     clean_related = _unique_terms(related_terms or [])
+    clean_path_prefixes = _normalize_path_prefixes(path_prefix)
     logger.info(
-        "Search: q=%r mode=%s view=%s whole_word=%s match_case=%s related=%s limit=%s offset=%s",
-        q, mode, view, whole_word, match_case, clean_related, limit if limit is not None else "all", offset,
+        "Search: q=%r mode=%s view=%s whole_word=%s match_case=%s related=%s paths=%s limit=%s offset=%s",
+        q, mode, view, whole_word, match_case, clean_related, clean_path_prefixes,
+        limit if limit is not None else "all", offset,
     )
 
     t0 = time.perf_counter()
@@ -300,8 +334,12 @@ async def search(
 
     try:
         if view == "occurrences":
-            return _run_occurrences(q, branches, whole_word, match_case, clean_related, limit, offset, t0)
-        return _run_documents(q, mode, branches, whole_word, match_case, clean_related, limit, t0)
+            return _run_occurrences(
+                q, branches, whole_word, match_case, clean_related, clean_path_prefixes, limit, offset, t0
+            )
+        return _run_documents(
+            q, mode, branches, whole_word, match_case, clean_related, clean_path_prefixes, limit, t0
+        )
     except HTTPException:
         raise
     except Exception as exc:
@@ -315,6 +353,7 @@ def _search_fts_candidates(
     whole_word: bool,
     match_case: bool,
     limit: Optional[int],
+    path_prefixes: Optional[List[str]] = None,
 ) -> List[dict]:
     """Run broad FTS recall, then strict-filter against visible chunk text."""
     strict = whole_word or match_case or len(branches) > 1
@@ -323,11 +362,14 @@ def _search_fts_candidates(
 
     for attempt in range(attempts):
         candidate_limit = _candidate_limit(limit, strict, attempt)
+        if path_prefixes:
+            candidate_limit = None
         raw = _dedupe_hits(
             hit
             for query in _recall_queries(q, branches)
             for hit in search_fts(query, limit=candidate_limit)
         )
+        raw = _filter_by_path_prefix(raw, path_prefixes or [])
         filtered = _annotate_and_filter(raw, branches, whole_word, match_case)
         if limit is None or len(filtered) >= limit or attempt == attempts - 1:
             return filtered
@@ -340,6 +382,7 @@ def _search_vector_candidates(
     whole_word: bool,
     match_case: bool,
     limit: Optional[int],
+    path_prefixes: Optional[List[str]] = None,
 ) -> List[dict]:
     strict = whole_word or match_case or len(branches) > 1
     attempts = 2 if limit is not None and strict else 1
@@ -347,13 +390,14 @@ def _search_vector_candidates(
 
     for attempt in range(attempts):
         vector_limit = _candidate_limit(limit, strict, attempt)
-        if vector_limit is None:
+        if vector_limit is None or path_prefixes:
             vector_limit = collection_point_count()
         raw = _dedupe_hits(
             hit
             for query in _recall_queries(q, branches)
             for hit in (search_vector(embed_query(query), limit=vector_limit) if vector_limit else [])
         )
+        raw = _filter_by_path_prefix(raw, path_prefixes or [])
         filtered = _annotate_and_filter(raw, branches, whole_word, match_case)
         if limit is None or len(filtered) >= limit or attempt == attempts - 1:
             return filtered
@@ -367,16 +411,17 @@ def _run_documents(
     whole_word: bool,
     match_case: bool,
     related_terms: List[str],
+    path_prefixes: List[str],
     limit: Optional[int],
     t0: float,
 ) -> SearchResponse:
     if mode in {"hybrid", "vector"}:
-        vector_hits = _search_vector_candidates(q, branches, whole_word, match_case, limit)
+        vector_hits = _search_vector_candidates(q, branches, whole_word, match_case, limit, path_prefixes)
     else:
         vector_hits = []
 
     if mode in {"hybrid", "keyword"}:
-        fts_hits = _search_fts_candidates(q, branches, whole_word, match_case, limit)
+        fts_hits = _search_fts_candidates(q, branches, whole_word, match_case, limit, path_prefixes)
     else:
         fts_hits = []
 
@@ -429,6 +474,7 @@ def _run_occurrences(
     whole_word: bool,
     match_case: bool,
     related_terms: List[str],
+    path_prefixes: List[str],
     limit: Optional[int],
     offset: int,
     t0: float,
@@ -436,7 +482,7 @@ def _run_occurrences(
     if not branches:
         raise HTTPException(status_code=400, detail="Empty query")
 
-    fts_hits = _search_fts_candidates(q, branches, whole_word, match_case, None)
+    fts_hits = _search_fts_candidates(q, branches, whole_word, match_case, None, path_prefixes)
 
     if fts_hits:
         best_abs = abs(fts_hits[0].get("rank", -1)) or 1.0

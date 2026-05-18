@@ -6,11 +6,48 @@ function SearchRow({
   view = 'documents', setView = () => {},
   wholeWord = false, setWholeWord = () => {},
   matchCase = false, setMatchCase = () => {},
+  watchedDirs = [],
+  pathPrefixes = [], setPathPrefixes = () => {},
   relatedTerms = [], setRelatedTerms = () => {},
 }) {
   const T = useT();
   const [relatedDraft, setRelatedDraft] = React.useState('');
+  const [pathsOpen, setPathsOpen] = React.useState(false);
+  const pathControlRef = React.useRef(null);
   const isOccurrences = view === 'occurrences';
+  const pathOptions = React.useMemo(() => {
+    const seen = new Set();
+    return (watchedDirs || [])
+      .filter(Boolean)
+      .map(path => String(path))
+      .filter(path => {
+        const key = path.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }, [watchedDirs]);
+  const normPath = React.useCallback(path => path.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase(), []);
+
+  React.useEffect(() => {
+    const allowed = new Set(pathOptions.map(normPath));
+    setPathPrefixes(prev => {
+      const next = prev.filter(path => allowed.has(normPath(path)));
+      if (next.length === prev.length && next.every((path, index) => path === prev[index])) return prev;
+      return next;
+    });
+  }, [pathOptions, setPathPrefixes, normPath]);
+
+  React.useEffect(() => {
+    if (!pathsOpen) return;
+    const onPointerDown = (event) => {
+      if (pathControlRef.current && !pathControlRef.current.contains(event.target)) {
+        setPathsOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [pathsOpen]);
 
   const addRelated = React.useCallback((raw) => {
     const clean = raw.trim();
@@ -25,6 +62,25 @@ function SearchRow({
   const removeRelated = React.useCallback((term) => {
     setRelatedTerms(prev => prev.filter(t => t !== term));
   }, [setRelatedTerms]);
+
+  const togglePath = React.useCallback((path) => {
+    setPathPrefixes(prev => {
+      if (prev.length === 0) return [path];
+      const pathKey = normPath(path);
+      const exists = prev.some(p => normPath(p) === pathKey);
+      const next = exists ? prev.filter(p => normPath(p) !== pathKey) : [...prev, path];
+      return next.length === pathOptions.length ? [] : next;
+    });
+  }, [setPathPrefixes, pathOptions.length, normPath]);
+
+  const clearPaths = React.useCallback(() => {
+    setPathPrefixes([]);
+    setPathsOpen(false);
+  }, [setPathPrefixes]);
+
+  const pathLabel = pathPrefixes.length === 0
+    ? T('search_all_paths')
+    : (pathPrefixes.length === 1 ? pathPrefixes[0].split(/[\\/]/).filter(Boolean).pop() || pathPrefixes[0] : T('search_paths_count', { count: pathPrefixes.length }));
 
   return (
     <div className={'searchrow' + (open ? ' open' : ' closed')} aria-hidden={!open} inert={open ? undefined : ''}>
@@ -87,6 +143,46 @@ function SearchRow({
         >
           <Icon.matchCase />
         </button>
+
+        {pathOptions.length > 0 && (
+          <div className={'path-scope-control' + (pathsOpen ? ' open' : '')} ref={pathControlRef}>
+            <button
+              type="button"
+              className={'path-scope-trigger' + (pathPrefixes.length ? ' active' : '')}
+              onClick={() => setPathsOpen(open => !open)}
+              data-tip={T('search_path_scope')}
+            >
+              <Icon.folder />
+              <span>{pathLabel}</span>
+              <svg className="path-scope-caret" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6">
+                <polyline points="2,3.5 5,6.5 8,3.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+            {pathsOpen && (
+              <div className="path-scope-menu">
+                <div className="fgroup-title path-scope-title">
+                  <span>{T('search_path_scope')}</span>
+                  {pathPrefixes.length > 0 && <span className="clear" onClick={clearPaths}>{T('f_clear')}</span>}
+                </div>
+                {pathOptions.map(path => {
+                  const pathKey = normPath(path);
+                  const selected = pathPrefixes.length === 0 || pathPrefixes.some(p => normPath(p) === pathKey);
+                  const name = path.split(/[\\/]/).filter(Boolean).pop() || path;
+                  return (
+                    <div
+                      key={path}
+                      className={'fitem fitem-dim path-scope-item' + (selected ? ' on' : '')}
+                      onClick={() => togglePath(path)}
+                    >
+                      <span className="fitem-ico"><Icon.folder /></span>
+                      <span className="label" title={path}>{name}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="related-control">
           <span className="related-label">{T('related_terms')}</span>

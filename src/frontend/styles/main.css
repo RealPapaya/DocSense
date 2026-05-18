@@ -534,6 +534,79 @@ body {
   width: 18px;
   height: 18px;
 }
+.path-scope-control {
+  position: relative;
+  display: inline-flex;
+}
+.path-scope-trigger {
+  height: 36px;
+  min-width: 148px;
+  max-width: 230px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+  color: var(--fg-muted);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+.path-scope-trigger:hover,
+.path-scope-trigger.active,
+.path-scope-control.open .path-scope-trigger {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+  color: var(--fg);
+}
+.path-scope-trigger svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.path-scope-trigger span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.path-scope-caret {
+  margin-left: auto;
+  color: var(--fg-faint);
+}
+.path-scope-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 500;
+  width: 260px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  box-shadow: 0 10px 28px rgba(0,0,0,.16);
+}
+.path-scope-title {
+  margin-bottom: 6px;
+}
+.path-scope-item {
+  gap: 7px;
+}
+.path-scope-item .label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.path-scope-item .fitem-ico svg {
+  width: 14px;
+  height: 14px;
+}
 .related-control {
   display: flex;
   align-items: center;

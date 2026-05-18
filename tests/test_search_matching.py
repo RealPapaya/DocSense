@@ -13,6 +13,12 @@ def _hit(text: str, doc_id: str = "d1", chunk_index: int = 0) -> dict:
     }
 
 
+def _hit_at(path: str, text: str = "BIOS", doc_id: str = "d1") -> dict:
+    hit = _hit(text, doc_id)
+    hit["filepath"] = path
+    return hit
+
+
 def test_default_matching_is_case_insensitive():
     branches = search_route._match_branches(["bios"], [])
     hits = search_route._annotate_and_filter([_hit("BIOS and bios")], branches, False, False)
@@ -87,6 +93,23 @@ def test_related_terms_expand_fts_candidate_queries(monkeypatch):
 
     assert [call[0] for call in calls] == ["bios", "UEFI"]
     assert [(h["doc_id"], h["match_positions"]) for h in hits] == [("related", [0])]
+
+
+def test_path_prefix_filter_keeps_only_matching_paths():
+    hits = [
+        _hit_at(r"D:\docs\alpha\a.pdf", doc_id="keep"),
+        _hit_at(r"D:\docs\beta\b.pdf", doc_id="drop"),
+    ]
+
+    filtered = search_route._filter_by_path_prefix(hits, ["D:/docs/alpha"])
+
+    assert [hit["doc_id"] for hit in filtered] == ["keep"]
+
+
+def test_path_prefixes_are_normalized_and_deduped():
+    assert search_route._normalize_path_prefixes([" D:\\Docs\\Alpha\\ ", "D:/Docs/Alpha", ""]) == [
+        "D:/Docs/Alpha"
+    ]
 
 
 def test_occurrence_records_include_snippet_relative_spans():

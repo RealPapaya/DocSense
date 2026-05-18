@@ -13,6 +13,7 @@ function App() {
   const [wholeWord, setWholeWord] = React.useState(false);
   const [matchCase, setMatchCase] = React.useState(false);
   const [relatedTerms, setRelatedTerms] = React.useState([]);
+  const [searchPathPrefixes, setSearchPathPrefixes] = React.useState([]);
   const [filters,  setFilters]  = React.useState({ vendor: [], type: [], category: [], tags: [], folder: [] });
   const [selectedId, setSelectedId] = React.useState(null);
   const [sortKey,  setSortKey]  = React.useState('score');
@@ -237,6 +238,9 @@ function App() {
     (opts.relatedTerms || []).forEach(term => {
       if (term.trim()) params.append('related_terms', term.trim());
     });
+    (opts.pathPrefixes || []).forEach(path => {
+      if (path.trim()) params.append('path_prefix', path.trim());
+    });
     if (opts.view === 'documents') {
       params.set('mode', opts.mode === 'bm25' ? 'keyword' : opts.mode);
     } else {
@@ -253,7 +257,9 @@ function App() {
     setLoading(true);
     setError(null);
     try {
-      const url = buildSearchUrl(query, { view: searchView, mode, wholeWord, matchCase, relatedTerms, offset: 0 });
+      const url = buildSearchUrl(query, {
+        view: searchView, mode, wholeWord, matchCase, relatedTerms, pathPrefixes: searchPathPrefixes, offset: 0,
+      });
       const res = await fetch(url);
       if (!res.ok) throw new Error('Server error ' + res.status);
       const data = await res.json();
@@ -277,7 +283,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [query, mode, searchView, wholeWord, matchCase, relatedTerms, buildSearchUrl]);
+  }, [query, mode, searchView, wholeWord, matchCase, relatedTerms, searchPathPrefixes, buildSearchUrl]);
 
   const onLoadMore = React.useCallback(async () => {
     if (loadingMore || searchView !== 'occurrences') return;
@@ -286,7 +292,7 @@ function App() {
     try {
       const nextOffset = results.length;
       const url = buildSearchUrl(query, {
-        view: searchView, mode, wholeWord, matchCase, relatedTerms, offset: nextOffset, limit: summary.limit,
+        view: searchView, mode, wholeWord, matchCase, relatedTerms, pathPrefixes: searchPathPrefixes, offset: nextOffset, limit: summary.limit,
       });
       const res = await fetch(url);
       if (!res.ok) throw new Error('Server error ' + res.status);
@@ -299,7 +305,7 @@ function App() {
     } finally {
       setLoadingMore(false);
     }
-  }, [query, mode, searchView, wholeWord, matchCase, relatedTerms, loadingMore, summary, results.length, buildSearchUrl]);
+  }, [query, mode, searchView, wholeWord, matchCase, relatedTerms, searchPathPrefixes, loadingMore, summary, results.length, buildSearchUrl]);
 
   const watchedDir = status.watched_docs_dir || '';
   const watchedDirs = Array.isArray(status.watched_docs_dirs) && status.watched_docs_dirs.length
@@ -379,6 +385,8 @@ function App() {
             view={searchView} setView={setSearchView}
             wholeWord={wholeWord} setWholeWord={setWholeWord}
             matchCase={matchCase} setMatchCase={setMatchCase}
+            watchedDirs={watchedDirs}
+            pathPrefixes={searchPathPrefixes} setPathPrefixes={setSearchPathPrefixes}
             relatedTerms={relatedTerms} setRelatedTerms={setRelatedTerms}
           />
         )}
