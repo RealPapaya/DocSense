@@ -68,10 +68,16 @@ def get_watched_docs_dir() -> Path:
 
 
 def save_watched_docs_dirs(directories: list[Path]) -> list[Path]:
-    """Persist active watched directories and return their resolved paths."""
-    resolved = _dedupe_directories([_normalize_directory(directory) for directory in directories])
-    if not resolved:
-        resolved = [WATCHED_DOCS_DIR.resolve()]
+    """Persist active watched directories and return their resolved paths.
+
+    The default watched_docs/ directory is always kept as the first entry.
+    """
+    default = WATCHED_DOCS_DIR.resolve()
+    others = [
+        p for p in (_normalize_directory(d) for d in directories)
+        if str(p) != str(default)
+    ]
+    resolved = _dedupe_directories([default, *others])
 
     with _lock:
         settings = _read_raw_settings()

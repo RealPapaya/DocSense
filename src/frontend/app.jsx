@@ -311,6 +311,7 @@ function App() {
   const watchedDirs = Array.isArray(status.watched_docs_dirs) && status.watched_docs_dirs.length
     ? status.watched_docs_dirs
     : (watchedDir ? [watchedDir] : []);
+  const defaultWatchedDir = status.default_watched_docs_dir || '';
   const filtered = React.useMemo(() => {
     const bases = watchedDirs.map(path => path.replace(/\\/g, '/').replace(/\/$/, '')).filter(Boolean);
     let rs = allResults.filter(r => {
@@ -399,6 +400,7 @@ function App() {
               setTagsData={setTagsData}
               watchedDir={watchedDir}
               watchedDirs={watchedDirs}
+              defaultWatchedDir={defaultWatchedDir}
               onWatchDirChanged={refreshStatus}
             />
           ) : inBookmarks ? (
@@ -428,7 +430,7 @@ function App() {
             </div>
           ) : (
             <>
-              <FiltersRail filters={filters} setFilters={setFilters} allResults={allResults} tagsData={tagsData} watchedDir={watchedDir} watchedDirs={watchedDirs} />
+              <FiltersRail filters={filters} setFilters={setFilters} allResults={allResults} tagsData={tagsData} watchedDir={watchedDir} watchedDirs={watchedDirs} defaultWatchedDir={defaultWatchedDir} />
               <div className="resizer" onMouseDown={onResizerMouseDown}>
                 <div ref={resizerPillRef} className="resizer-pill" />
               </div>

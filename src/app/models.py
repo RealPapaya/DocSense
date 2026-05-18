@@ -67,3 +67,4 @@ class StatusResponse(BaseModel):
     collection_points: int
     watched_docs_dir: str
     watched_docs_dirs: List[str] = Field(default_factory=list)
+    default_watched_docs_dir: str = ""

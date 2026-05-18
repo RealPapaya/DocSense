@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from app.models import IndexResponse, StatusResponse
-from app.config import DB_PATH
+from app.config import DB_PATH, WATCHED_DOCS_DIR
 from app.services.fts import get_stats, get_all_documents
 from indexer.progress import get_state as get_progress_state, clear_progress_for_doc_ids
 from app.services.qdrant_store import collection_point_count
@@ -220,6 +220,7 @@ async def get_status():
         collection_points=collection_point_count(),
         watched_docs_dir=str(get_watched_docs_dir()),
         watched_docs_dirs=[str(path) for path in get_watched_docs_dirs()],
+        default_watched_docs_dir=str(WATCHED_DOCS_DIR.resolve()),
     )
 
 

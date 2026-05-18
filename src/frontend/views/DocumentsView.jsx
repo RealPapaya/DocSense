@@ -321,6 +321,7 @@ function DocCard({ doc, tagsData, setTagsData, onOpen, allowTagEdit = true, acti
 function WatchPathsPanel({
   open,
   paths,
+  defaultPath,
   message,
   saving,
   picking,
@@ -333,6 +334,10 @@ function WatchPathsPanel({
 }) {
   const T = useT();
   if (!open) return null;
+
+  const normalizedDefault = _normalizeWatchPath(defaultPath || '').toLowerCase();
+  const isDefault = (p) => normalizedDefault && _normalizeWatchPath(p || '').toLowerCase() === normalizedDefault;
+
   return (
     <div className="watch-paths-backdrop" onMouseDown={onClose}>
       <div className="watch-paths-panel" onMouseDown={e => e.stopPropagation()}>
@@ -353,14 +358,15 @@ function WatchPathsPanel({
             <div className="watch-path-row" key={index}>
               <input
                 value={path}
-                onChange={e => onChangePath(index, e.target.value)}
+                onChange={e => isDefault(path) ? null : onChangePath(index, e.target.value)}
                 onKeyDown={e => e.stopPropagation()}
+                readOnly={isDefault(path)}
                 aria-label={T('docs_paths_title')}
               />
-              <button className="iconbtn" onClick={() => onReplacePath(index)} disabled={picking} data-tip={T('docs_choose_folder')}>
+              <button className="iconbtn" onClick={() => onReplacePath(index)} disabled={picking || isDefault(path)} data-tip={T('docs_choose_folder')}>
                 <Icon.pencil />
               </button>
-              <button className="iconbtn watch-path-delete" onClick={() => onDeletePath(index)} data-tip={T('bookmarks_remove')}>
+              <button className="iconbtn watch-path-delete" onClick={() => onDeletePath(index)} disabled={isDefault(path)} data-tip={T('bookmarks_remove')}>
                 <Icon.trash />
               </button>
             </div>
@@ -399,7 +405,7 @@ function _relativeToWatchPaths(filepath, watchPaths) {
   return rel ? `${rootName}/${rel}` : rootName;
 }
 
-function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, watchedDirs, onWatchDirChanged }) {
+function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, watchedDirs, defaultWatchedDir, onWatchDirChanged }) {
   const T = useT();
   const lang = React.useContext(LangCtx);
   const confirm = useConfirm();
@@ -801,6 +807,7 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, watchedDirs,
       <WatchPathsPanel
         open={watchPathsOpen}
         paths={draftWatchPaths}
+        defaultPath={defaultWatchedDir}
         message={watchFolderMessage}
         saving={savingWatchPaths}
         picking={choosingFolder}
