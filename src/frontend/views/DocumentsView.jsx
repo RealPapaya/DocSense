@@ -514,9 +514,23 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, watchedDirs,
     } catch(e) {}
   }, []);
 
-  const handleAddWatchPath = React.useCallback(() => {
-    setDraftWatchPaths(current => [...current, '']);
-  }, []);
+  const handleAddWatchPath = React.useCallback(async () => {
+    if (choosingFolder) return;
+    setChoosingFolder(true);
+    setWatchFolderMessage('');
+    try {
+      const path = await pickWatchFolder('~');
+      if (!path) return;
+      setDraftWatchPaths(current => {
+        const exists = current.some(p => _normalizeWatchPath(p).toLowerCase() === _normalizeWatchPath(path).toLowerCase());
+        return exists ? current : [...current, path];
+      });
+    } catch(e) {
+      setWatchFolderMessage(e.message || T('docs_watch_apply_failed'));
+    } finally {
+      setChoosingFolder(false);
+    }
+  }, [choosingFolder, pickWatchFolder, T]);
 
   const handleReplaceWatchPath = React.useCallback(async (index) => {
     if (choosingFolder) return;
