@@ -1939,6 +1939,7 @@ span.doc-tree-icon {
   font: inherit;
   font-size: 11px;
   cursor: pointer;
+  white-space: nowrap;
 }
 .tag-mode-toggle button.on {
   background: var(--accent-soft);

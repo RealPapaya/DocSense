@@ -162,13 +162,13 @@ function App() {
     return () => clearInterval(id);
   }, [refreshStatus]);
 
-        const [tweaks, setTweakState] = React.useState({
+          const [tweaks, setTweakState] = React.useState({
     layout:      saved.layout      || 'sidebar',
     density:     saved.density     || 'balanced',
     accent:      saved.accent      || 'indigo',
-    fontSans:    saved.fontSans    || 'inter',
+    fontSans:    saved.fontSans    || 'jetbrains-mono',
     fontMono:    saved.fontMono    || 'jetbrains-mono',
-    fontDisplay: saved.fontDisplay || 'inter',
+    fontDisplay: saved.fontDisplay || 'jetbrains-mono',
     cardMode:    saved.cardMode    || 'detailed',
     highlight:   saved.highlight    || 'yellow',
   });
