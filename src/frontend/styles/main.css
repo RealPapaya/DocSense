@@ -2180,10 +2180,12 @@ span.doc-tree-icon {
   color: var(--fg-muted);
   border-radius: 4px;
   font: inherit;
-  font-size: 11px;
+  font-size: 10.5px;
   line-height: 1;
   cursor: pointer;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   display: inline-flex;
   align-items: center;
   justify-content: center;

@@ -430,8 +430,29 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, watchedDirs,
   const [expandSignal, setExpandSignal] = React.useState({ version: 0, value: true });
   const expandAll = () => setExpandSignal(s => ({ version: s.version + 1, value: true }));
   const collapseAll = () => setExpandSignal(s => ({ version: s.version + 1, value: false }));
-  const [indexProgress, setIndexProgress] = React.useState({ files: {}, batch: { active: false } });
+    const [indexProgress, setIndexProgress] = React.useState({ files: {}, batch: { active: false } });
   const [pollStats, setPollStats] = React.useState({ count: 0, errors: 0, lastAt: 0 });
+
+  // Sidebar resizer
+  const [sidebarW, setSidebarW] = React.useState(196);
+  const sidebarResizerPillRef = React.useRef(null);
+  const onSidebarResizerMouseDown = React.useCallback((e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = sidebarW;
+    sidebarResizerPillRef.current?.classList.add('dragging');
+    const onMove = (ev) => {
+      const next = Math.max(140, Math.min(320, startW + ev.clientX - startX));
+      setSidebarW(next);
+    };
+    const onUp = () => {
+      sidebarResizerPillRef.current?.classList.remove('dragging');
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [sidebarW]);
 
   const fetchDocs = React.useCallback(() => {
     return fetch('/api/documents')
@@ -819,20 +840,19 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, watchedDirs,
         onSave={handleSaveWatchPaths}
       />
 
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+            <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
         {/* Left tag sidebar */}
-        <div style={{ width: 196, flexShrink: 0, borderRight: '1px solid var(--border)', background: 'var(--bg-elev)', overflowY: 'auto', padding: '4px 0' }}>
+        <div style={{ width: sidebarW + 'px', flexShrink: 0, borderRight: 'none', background: 'var(--bg-elev)', overflowY: 'auto', padding: '4px 0' }}>
           <div className="fgroup">
             <div className="fgroup-title"><span>{T('docs_tag_mode')}</span></div>
             <div className="tag-mode-toggle">
               <button className={tagMode === 'auto' ? 'on' : ''} onClick={() => setTagMode('auto')}>{T('docs_auto_tags')}</button>
               <button className={tagMode === 'manual' ? 'on' : ''} onClick={() => setTagMode('manual')}>{T('docs_manual_tags')}</button>
             </div>
-            {tagMode === 'auto' && (
+                        {tagMode === 'auto' && (
               <>
                 <button className="tag-manager-apply primary" onClick={applyFolderTags}>{T('docs_apply_folder_tags')}</button>
                 <button className="tag-manager-apply danger" onClick={removeAllTags}>{T('docs_remove_all_tags')}</button>
-                {tagApplyMessage && <div className="tag-manager-message">{tagApplyMessage}</div>}
               </>
             )}
           </div>
@@ -897,7 +917,12 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, watchedDirs,
                 </div>
               )}
             </div>
-          </div>
+                    </div>
+        </div>
+
+        {/* Resizer */}
+        <div className="resizer" onMouseDown={onSidebarResizerMouseDown}>
+          <div ref={sidebarResizerPillRef} className="resizer-pill" />
         </div>
 
         {/* Main content */}
