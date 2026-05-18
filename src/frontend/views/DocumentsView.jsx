@@ -1,6 +1,41 @@
 // DocumentsView — full-screen "Files" view (explorer + list, tag sidebar).
 
-var IndexProgressCtx = React.createContext({});
+// Shape: { files: {doc_id: {pct, phase, filename}}, batch: {active, total, completed, current_file, current_phase, started_at, finished_at} }
+var IndexProgressCtx = React.createContext({ files: {}, batch: { active: false } });
+
+function _docPct(progress, docId) {
+  const entry = progress && progress.files && progress.files[docId];
+  return entry && typeof entry.pct === 'number' ? entry.pct : 0;
+}
+
+function IndexingHeader({ batch }) {
+  const T = useT();
+  const lang = React.useContext(LangCtx);
+  if (!batch || (!batch.active && !batch.finished_at)) return null;
+  const total = Math.max(1, batch.total || 0);
+  const completed = Math.min(total, batch.completed || 0);
+  const ratio = Math.min(1, completed / total);
+  const phaseLabel = batch.current_phase
+    ? (translate(lang, 'docs_indexing_phase_' + batch.current_phase) || batch.current_phase)
+    : '';
+  const file = batch.current_file || '';
+  const done = !batch.active && batch.finished_at;
+  return (
+    <div className={'indexing-header' + (done ? ' done' : '')} role="status" aria-live="polite">
+      <div className="indexing-header-row">
+        <span className="indexing-header-label">
+          {done ? T('docs_indexing_done') : T('docs_indexing_header')} {completed}/{batch.total || 0}
+          {!done && file ? <> — <span className="indexing-header-file" title={file}>{file}</span></> : null}
+          {!done && phaseLabel ? <span className="indexing-header-phase">({phaseLabel})</span> : null}
+        </span>
+        <span className="indexing-header-pct">{Math.round(ratio * 100)}%</span>
+      </div>
+      <div className="indexing-header-bar">
+        <div className="indexing-header-bar-fill" style={{ width: (ratio * 100).toFixed(1) + '%' }} />
+      </div>
+    </div>
+  );
+}
 
 function _countFiles(node) {
   return node.files.length + Object.values(node.children).reduce((s, c) => s + _countFiles(c), 0);
@@ -166,7 +201,7 @@ function ExplorerFileRow({ doc, tagsData, setTagsData, onOpen, allowTagEdit = tr
   const assigned = tagsData.assignments[doc.doc_id] || [];
   const assignedTags = tagsData.customTags.filter(t => assigned.includes(t.id));
   const statusLabel = indexStatusLabel(doc, lang);
-  const pct = statusLabel ? (indexProgress[doc.doc_id] ?? 0) : null;
+  const pct = statusLabel ? _docPct(indexProgress, doc.doc_id) : null;
   return (
     <div className={'explorer-file-item' + (expanded ? ' expanded' : '')}>
       <div className={'explorer-file-row' + (statusLabel ? ' indexing' : '')} onClick={() => setExpanded(prev => !prev)}>
@@ -231,7 +266,7 @@ function DocCard({ doc, tagsData, setTagsData, onOpen, allowTagEdit = true, acti
   const extColors = { PDF: ['#ef4444','#fef2f2'], DOC: ['#3b82f6','#eff6ff'], DOCX: ['#3b82f6','#eff6ff'], XLS: ['#10b981','#ecfdf5'], XLSX: ['#10b981','#ecfdf5'], PPT: ['#f59e0b','#fffbeb'], PPTX: ['#f59e0b','#fffbeb'] };
   const [fg, bg] = extColors[ext] || ['var(--fg-faint)','var(--bg-soft)'];
   const statusLabel = indexStatusLabel(doc, lang);
-  const pct = statusLabel ? (indexProgress[doc.doc_id] ?? 0) : null;
+  const pct = statusLabel ? _docPct(indexProgress, doc.doc_id) : null;
   return (
     <div className={'doc-card' + (expanded ? ' expanded' : '') + (statusLabel ? ' indexing' : '')} onClick={() => setExpanded(prev => !prev)}>
       <div className="doc-card-main">
@@ -285,7 +320,7 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, onWatchDirCh
   const [expandSignal, setExpandSignal] = React.useState({ version: 0, value: true });
   const expandAll = () => setExpandSignal(s => ({ version: s.version + 1, value: true }));
   const collapseAll = () => setExpandSignal(s => ({ version: s.version + 1, value: false }));
-  const [indexProgress, setIndexProgress] = React.useState({});
+  const [indexProgress, setIndexProgress] = React.useState({ files: {}, batch: { active: false } });
 
   const fetchDocs = React.useCallback(() => {
     return fetch('/api/documents')
@@ -303,16 +338,23 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, onWatchDirCh
   }, [fetchDocs]);
 
   const hasPending = docs.some(doc => !isDocIndexed(doc));
+  const batchActive = !!(indexProgress.batch && indexProgress.batch.active);
+  const shouldPoll = hasPending || batchActive;
 
   React.useEffect(() => {
-    if (!hasPending) { setIndexProgress({}); return; }
+    if (!shouldPoll) return undefined;
+    let cancelled = false;
     const fetchProgress = () =>
-      fetch('/api/progress').then(r => r.json()).then(setIndexProgress).catch(() => {});
+      fetch('/api/progress')
+        .then(r => r.json())
+        .then(d => { if (!cancelled && d && typeof d === 'object') setIndexProgress(d); })
+        .catch(() => {});
     fetchProgress();
+    // 400 ms keeps the bar visibly moving without hammering the backend.
+    const progTimer = setInterval(fetchProgress, 400);
     const docsTimer = setInterval(fetchDocs, 2000);
-    const progTimer = setInterval(fetchProgress, 800);
-    return () => { clearInterval(docsTimer); clearInterval(progTimer); };
-  }, [hasPending, fetchDocs]);
+    return () => { cancelled = true; clearInterval(progTimer); clearInterval(docsTimer); };
+  }, [shouldPoll, fetchDocs]);
 
   React.useEffect(() => {
     if (addingTag && newTagInputRef.current) newTagInputRef.current.focus();
@@ -649,6 +691,7 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, onWatchDirCh
 
         {/* Main content */}
         <div className="docs-body" style={{ flex: 1 }}>
+          <IndexingHeader batch={indexProgress.batch} />
           {loading ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}>
               <div style={{ width: 22, height: 22, border: '2px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}/>

@@ -164,6 +164,19 @@ var DICT = {
     sb_docs: "docs",
     sb_matches: "matches",
 
+    docs_indexing_header: "Indexing",
+    docs_indexing_done: "Indexing complete",
+    docs_indexing_phase_extract: "extracting",
+    docs_indexing_phase_embed: "embedding",
+    docs_indexing_phase_store: "saving",
+
+    tw_performance: "Performance",
+    tw_perf_mode: "Indexing mode",
+    tw_perf_power_saver: "Power Saver",
+    tw_perf_balanced: "Balanced",
+    tw_perf_max_speed: "Max Speed",
+    tw_perf_hint: "Power Saver uses one ONNX thread; Max Speed uses up to four. Changes take full effect after restart.",
+
     tw_layout: "Layout",
     tw_language: "Language",
     tw_interface_language: "Interface language",
@@ -357,6 +370,19 @@ var DICT = {
     sb_chunks: "區塊",
     sb_docs: "文件",
     sb_matches: "符合",
+
+    docs_indexing_header: "正在索引",
+    docs_indexing_done: "索引完成",
+    docs_indexing_phase_extract: "解析中",
+    docs_indexing_phase_embed: "建立向量",
+    docs_indexing_phase_store: "寫入資料庫",
+
+    tw_performance: "效能",
+    tw_perf_mode: "索引模式",
+    tw_perf_power_saver: "省電",
+    tw_perf_balanced: "平衡",
+    tw_perf_max_speed: "高速",
+    tw_perf_hint: "省電模式只用 1 條 ONNX 執行緒;高速最多 4 條。切換後 ONNX 執行緒會在下次啟動才完全生效。",
 
     tw_layout: "版面",
     tw_language: "語言",

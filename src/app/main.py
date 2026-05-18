@@ -33,6 +33,7 @@ from app.services.fts import init_db
 from app.services.qdrant_store import ensure_collection
 from app.watch_runtime import start_current_watcher, stop_current_watcher
 from app.watch_settings import get_watched_docs_dir
+from app.perf_settings import get_perf_mode, get_params as get_perf_params
 from indexer.pipeline import index_all
 from indexer.watcher import stop_worker
 
@@ -78,6 +79,13 @@ async def lifespan(app: FastAPI):
     ensure_collection()
 
     get_watched_docs_dir().mkdir(parents=True, exist_ok=True)
+
+    perf_mode = get_perf_mode()
+    perf_params = get_perf_params(perf_mode)
+    logger.info(
+        "Indexing performance mode: %s (threads=%d, batch=%d)",
+        perf_mode, perf_params["threads"], perf_params["batch"],
+    )
 
     logger.info("Starting file watcher …")
     start_current_watcher()

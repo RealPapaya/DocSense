@@ -9,9 +9,12 @@ a token-budget limit when embedding.
 """
 from __future__ import annotations
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Callable, List, Dict, Any, Optional
 
 from app.config import CHUNK_SIZE, CHUNK_OVERLAP
+
+# Callback invoked as on_page(done_pages, total_pages) during PDF extraction.
+PageCallback = Optional[Callable[[int, int], None]]
 
 
 # ── Chunker ───────────────────────────────────────────────────────────────────
@@ -35,15 +38,23 @@ def _chunk(text: str) -> List[str]:
 
 # ── Per-format extractors ─────────────────────────────────────────────────────
 
-def _extract_pdf(path: Path) -> List[Dict[str, Any]]:
+def _extract_pdf(path: Path, on_page: PageCallback = None) -> List[Dict[str, Any]]:
     import fitz  # pymupdf
     results = []
     doc = fitz.open(str(path))
-    for page_num, page in enumerate(doc, 1):
-        text = page.get_text("text")
-        for chunk in _chunk(text):
-            results.append({"text": chunk, "page": page_num})
-    doc.close()
+    total = doc.page_count
+    try:
+        for page_num, page in enumerate(doc, 1):
+            text = page.get_text("text")
+            for chunk in _chunk(text):
+                results.append({"text": chunk, "page": page_num})
+            if on_page is not None:
+                try:
+                    on_page(page_num, total)
+                except Exception:
+                    pass
+    finally:
+        doc.close()
     return results
 
 
@@ -104,14 +115,19 @@ _EXTRACTORS = {
 }
 
 
-def extract(path: Path) -> List[Dict[str, Any]]:
+def extract(path: Path, on_page: PageCallback = None) -> List[Dict[str, Any]]:
     """
     Extract text chunks from *path*.
     Returns list of {"text": str, "page": int | None}.
     Raises ValueError for unsupported file types.
+
+    ``on_page`` is currently only honoured by the PDF extractor (its page loop
+    is by far the slowest); the other formats stream too quickly to bother.
     """
     suffix = path.suffix.lower()
     extractor = _EXTRACTORS.get(suffix)
     if extractor is None:
         raise ValueError(f"Unsupported file type: {suffix!r}")
+    if suffix == ".pdf":
+        return extractor(path, on_page=on_page)
     return extractor(path)

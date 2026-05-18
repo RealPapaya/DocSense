@@ -178,6 +178,24 @@ function App() {
     setTweakState(prev => ({ ...prev, ...edits }));
   }, []);
 
+  const [perfMode, setPerfModeState] = React.useState('balanced');
+  React.useEffect(() => {
+    let cancelled = false;
+    fetch('/api/perf-mode')
+      .then(r => r.json())
+      .then(d => { if (!cancelled && d && d.mode) setPerfModeState(d.mode); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  const setPerfMode = React.useCallback((mode) => {
+    setPerfModeState(mode);
+    fetch('/api/perf-mode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode }),
+    }).catch(() => {});
+  }, []);
+
   // Persist preferences to localStorage and, after startup load, to the .local file.
   React.useEffect(() => {
     const data = { theme, lang, ...tweaks };
@@ -528,6 +546,22 @@ function App() {
                 { value: 'spacious', label: T('tw_density_spacious') },
               ]}
             />
+          </TweakSection>
+
+          <TweakSection label={T('tw_performance')}>
+            <TweakRadio
+              label={T('tw_perf_mode')}
+              value={perfMode}
+              onChange={setPerfMode}
+              options={[
+                { value: 'power_saver', label: T('tw_perf_power_saver') },
+                { value: 'balanced',    label: T('tw_perf_balanced') },
+                { value: 'max_speed',   label: T('tw_perf_max_speed') },
+              ]}
+            />
+            <div style={{ color: 'var(--fg-faint)', fontSize: 11, lineHeight: 1.45 }}>
+              {T('tw_perf_hint')}
+            </div>
           </TweakSection>
 
         </TweaksPanel>

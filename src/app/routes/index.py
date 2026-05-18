@@ -17,12 +17,18 @@ from pydantic import BaseModel
 from app.models import IndexResponse, StatusResponse
 from app.config import DB_PATH
 from app.services.fts import get_stats, get_all_documents
-from indexer.progress import get_all as get_all_progress
+from indexer.progress import get_state as get_progress_state
 from app.services.qdrant_store import collection_point_count
 from app.services.qdrant_store import delete_doc
 from app.services.fts import delete_document
 from app.watch_runtime import restart_current_watcher
 from app.watch_settings import get_watched_docs_dir, save_watched_docs_dir
+from app.perf_settings import (
+    VALID_MODES as PERF_MODES,
+    get_params as get_perf_params,
+    get_perf_mode,
+    set_perf_mode,
+)
 from indexer.extractor import SUPPORTED_EXTENSIONS
 from indexer.pipeline import index_all
 
@@ -83,8 +89,27 @@ async def trigger_index(background_tasks: BackgroundTasks):
 
 @router.get("/progress")
 async def get_progress():
-    """Return per-file indexing progress. Keys are doc_ids, values are 0–99."""
-    return get_all_progress()
+    """Return per-file + batch-level indexing progress."""
+    return get_progress_state()
+
+
+class PerfModeRequest(BaseModel):
+    mode: str
+
+
+@router.get("/perf-mode")
+async def get_perf_mode_route():
+    mode = get_perf_mode()
+    return {"mode": mode, "modes": list(PERF_MODES), "params": get_perf_params(mode)}
+
+
+@router.post("/perf-mode")
+async def set_perf_mode_route(payload: PerfModeRequest):
+    try:
+        mode = set_perf_mode(payload.mode)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"mode": mode, "params": get_perf_params(mode)}
 
 
 @router.get("/status", response_model=StatusResponse)
