@@ -305,6 +305,9 @@ body {
     transform 0.28s cubic-bezier(.2,.8,.2,1),
     border-color 0.2s ease;
 }
+.searchrow:has(.path-scope-control.open) {
+  overflow: visible;
+}
 .searchrow.closed {
   max-height: 0;
   padding-top: 0;

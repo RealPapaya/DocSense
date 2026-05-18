@@ -137,6 +137,19 @@ def finish_batch() -> None:
     threading.Timer(BATCH_LINGER_SEC, _reset).start()
 
 
+def clear_progress_for_doc_ids(doc_ids: set[str]) -> None:
+    """Remove in-flight entries for the given doc IDs and abort the batch if nothing remains."""
+    if not doc_ids:
+        return
+    with _lock:
+        for doc_id in doc_ids:
+            _files.pop(doc_id, None)
+        still_inflight = any(v.get("pct", 0) < 100 for v in _files.values())
+        if not still_inflight and _batch["active"]:
+            _batch["active"] = False
+            _batch["finished_at"] = None
+
+
 def get_state() -> dict:
     """Snapshot for the /api/progress endpoint."""
     with _lock:

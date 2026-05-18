@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from app.models import IndexResponse, StatusResponse
 from app.config import DB_PATH
 from app.services.fts import get_stats, get_all_documents
-from indexer.progress import get_state as get_progress_state
+from indexer.progress import get_state as get_progress_state, clear_progress_for_doc_ids
 from app.services.qdrant_store import collection_point_count
 from app.services.qdrant_store import delete_doc
 from app.services.fts import delete_document
@@ -259,6 +259,31 @@ async def apply_watch_folders(payload: WatchFoldersApplyRequest, background_task
 
     watched_docs_dirs = save_watched_docs_dirs(paths)
     restart_current_watcher()
+
+    # Cancel in-flight progress for files that no longer belong to any watched path.
+    inflight_ids = {
+        doc_id
+        for doc_id, entry in get_progress_state()["files"].items()
+        if entry.get("pct", 0) < 100
+    }
+    if inflight_ids:
+        con = sqlite3.connect(str(DB_PATH))
+        try:
+            rows = con.execute(
+                "SELECT doc_id, filepath FROM documents WHERE doc_id IN ({})".format(
+                    ",".join("?" * len(inflight_ids))
+                ),
+                list(inflight_ids),
+            ).fetchall()
+        finally:
+            con.close()
+        outside_ids = {
+            doc_id
+            for doc_id, filepath in rows
+            if not _is_within_any_directory(filepath, watched_docs_dirs)
+        }
+        if outside_ids:
+            clear_progress_for_doc_ids(outside_ids)
 
     if payload.clear_existing:
         _delete_documents_outside(watched_docs_dirs)
