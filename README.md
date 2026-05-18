@@ -1,6 +1,6 @@
 # DocSense
 
-> **English** | [中文說明](#docsense-中文說明)
+> **English** | [繁體中文](README.zh-TW.md)
 
 **Local document hybrid search — PDF, DOCX, XLSX, PPTX.**  
 Semantic + full-text hybrid search, fully offline, no Docker, no cloud, no GPU required.

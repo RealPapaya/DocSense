@@ -1,6 +1,6 @@
 # DocSense 中文說明
 
-> [English](#docsense) | **中文**
+> [English](README.md) | **繁體中文**
 
 **本機文件混合搜尋 — PDF、DOCX、XLSX、PPTX。**  
 語意搜尋 + 全文搜尋混合模式，完全離線運行，無需 Docker、無需雲端服務、無需 GPU。
