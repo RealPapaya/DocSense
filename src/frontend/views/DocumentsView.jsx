@@ -8,18 +8,37 @@ function _docPct(progress, docId) {
   return entry && typeof entry.pct === 'number' ? entry.pct : 0;
 }
 
-function IndexingHeader({ batch }) {
+function IndexingHeader({ progress }) {
   const T = useT();
   const lang = React.useContext(LangCtx);
-  if (!batch || (!batch.active && !batch.finished_at)) return null;
-  const total = Math.max(1, batch.total || 0);
-  const completed = Math.min(total, batch.completed || 0);
-  const ratio = Math.min(1, completed / total);
-  const phaseLabel = batch.current_phase
-    ? (translate(lang, 'docs_indexing_phase_' + batch.current_phase) || batch.current_phase)
+  const batch = (progress && progress.batch) || {};
+  const files = (progress && progress.files) || {};
+  const inflight = Object.values(files).filter(f => (f.pct ?? 0) < 100);
+  // Show during a manual batch (batch.active), during the linger window
+  // (batch.finished_at set), OR when the watchdog is mid-flight on a
+  // single file outside any batch.
+  if (!batch.active && !batch.finished_at && inflight.length === 0) return null;
+
+  let total, completed, ratio, file, phaseRaw;
+  if (batch.active || batch.finished_at) {
+    total = Math.max(1, batch.total || 0);
+    completed = Math.min(total, batch.completed || 0);
+    ratio = Math.min(1, completed / total);
+    file = batch.current_file || (inflight[0] && inflight[0].filename) || '';
+    phaseRaw = batch.current_phase || (inflight[0] && inflight[0].phase);
+  } else {
+    // Watcher-driven single-file flow.
+    const cur = inflight[0];
+    total = 1;
+    completed = 0;
+    ratio = (cur.pct ?? 0) / 100;
+    file = cur.filename || '';
+    phaseRaw = cur.phase;
+  }
+  const phaseLabel = phaseRaw
+    ? (translate(lang, 'docs_indexing_phase_' + phaseRaw) || phaseRaw)
     : '';
-  const file = batch.current_file || '';
-  const done = !batch.active && batch.finished_at;
+  const done = !batch.active && batch.finished_at && inflight.length === 0;
   return (
     <div className={'indexing-header' + (done ? ' done' : '')} role="status" aria-live="polite">
       <div className="indexing-header-row">
@@ -321,6 +340,7 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, onWatchDirCh
   const expandAll = () => setExpandSignal(s => ({ version: s.version + 1, value: true }));
   const collapseAll = () => setExpandSignal(s => ({ version: s.version + 1, value: false }));
   const [indexProgress, setIndexProgress] = React.useState({ files: {}, batch: { active: false } });
+  const [pollStats, setPollStats] = React.useState({ count: 0, errors: 0, lastAt: 0 });
 
   const fetchDocs = React.useCallback(() => {
     return fetch('/api/documents')
@@ -337,24 +357,30 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, onWatchDirCh
     fetchDocs().finally(() => setLoading(false));
   }, [fetchDocs]);
 
-  const hasPending = docs.some(doc => !isDocIndexed(doc));
-  const batchActive = !!(indexProgress.batch && indexProgress.batch.active);
-  const shouldPoll = hasPending || batchActive;
-
+  // Unconditional polling while DocumentsView is mounted. /api/progress is
+  // cheap (a single in-memory dict snapshot) and polling unconditionally
+  // means the bars can never get "stuck" because shouldPoll didn't latch.
+  // 500 ms keeps wire traffic light while still catching the 5/20/40/85/100
+  // checkpoints emitted by the pipeline for any reasonable-sized file.
   React.useEffect(() => {
-    if (!shouldPoll) return undefined;
     let cancelled = false;
     const fetchProgress = () =>
-      fetch('/api/progress')
+      fetch('/api/progress', { cache: 'no-store' })
         .then(r => r.json())
-        .then(d => { if (!cancelled && d && typeof d === 'object') setIndexProgress(d); })
-        .catch(() => {});
+        .then(d => {
+          if (cancelled) return;
+          if (d && typeof d === 'object') setIndexProgress(d);
+          setPollStats(s => ({ count: s.count + 1, errors: s.errors, lastAt: Date.now() }));
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setPollStats(s => ({ count: s.count, errors: s.errors + 1, lastAt: s.lastAt }));
+        });
     fetchProgress();
-    // 400 ms keeps the bar visibly moving without hammering the backend.
-    const progTimer = setInterval(fetchProgress, 400);
-    const docsTimer = setInterval(fetchDocs, 2000);
+    const progTimer = setInterval(fetchProgress, 500);
+    const docsTimer = setInterval(fetchDocs, 2500);
     return () => { cancelled = true; clearInterval(progTimer); clearInterval(docsTimer); };
-  }, [shouldPoll, fetchDocs]);
+  }, [fetchDocs]);
 
   React.useEffect(() => {
     if (addingTag && newTagInputRef.current) newTagInputRef.current.focus();
