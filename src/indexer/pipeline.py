@@ -13,6 +13,7 @@ from typing import Tuple
 
 from app.watch_settings import get_watched_docs_dir
 from indexer.extractor import extract, SUPPORTED_EXTENSIONS
+from indexer.progress import set_progress, clear_progress
 from app.services.embedder import embed
 from app.services import qdrant_store as qs
 from app.services.fts import (
@@ -99,6 +100,7 @@ def index_file(path: Path, known_mtime: float | None = None) -> Tuple[bool, str]
 
     logger.info("Indexing: %s", path.name)
     try:
+        set_progress(doc_id, 5)
         stat   = path.stat()
         chunks = extract(path)
         if not chunks:
@@ -110,9 +112,11 @@ def index_file(path: Path, known_mtime: float | None = None) -> Tuple[bool, str]
             chunk["filename"] = path.name
             chunk["filepath"] = filepath
 
-        texts     = [c["text"] for c in chunks]
-        vectors   = embed(texts)
+        set_progress(doc_id, 40)
+        texts   = [c["text"] for c in chunks]
+        vectors = embed(texts)
 
+        set_progress(doc_id, 80)
         # Atomically replace old data
         delete_document(doc_id)          # SQLite (cascade → chunks → FTS)
         qs.delete_doc(doc_id)            # Qdrant
@@ -134,6 +138,7 @@ def index_file(path: Path, known_mtime: float | None = None) -> Tuple[bool, str]
         logger.exception("Failed to index %s: %s", path.name, exc)
         return False, f"error:{exc}"
     finally:
+        clear_progress(doc_id)
         lock.release()
 
 

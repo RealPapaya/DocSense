@@ -1,5 +1,7 @@
 // DocumentsView — full-screen "Files" view (explorer + list, tag sidebar).
 
+var IndexProgressCtx = React.createContext({});
+
 function _countFiles(node) {
   return node.files.length + Object.values(node.children).reduce((s, c) => s + _countFiles(c), 0);
 }
@@ -152,18 +154,19 @@ function FileActionPanel({ doc, tagsData, setTagsData, onOpen, allowTagEdit = tr
         </>
       )}
 
-      {statusLabel && <span className="index-pill pending">{statusLabel}</span>}
     </div>
   );
 }
 
 function ExplorerFileRow({ doc, tagsData, setTagsData, onOpen, allowTagEdit = true, activeTagFlyout, setActiveTagFlyout }) {
   const lang = React.useContext(LangCtx);
+  const indexProgress = React.useContext(IndexProgressCtx);
   const [expanded, setExpanded] = React.useState(false);
   const ext = (doc.filename.match(/\.([^.]+)$/) || ['',''])[1].toUpperCase();
   const assigned = tagsData.assignments[doc.doc_id] || [];
   const assignedTags = tagsData.customTags.filter(t => assigned.includes(t.id));
   const statusLabel = indexStatusLabel(doc, lang);
+  const pct = statusLabel ? (indexProgress[doc.doc_id] ?? 0) : null;
   return (
     <div className={'explorer-file-item' + (expanded ? ' expanded' : '')}>
       <div className={'explorer-file-row' + (statusLabel ? ' indexing' : '')} onClick={() => setExpanded(prev => !prev)}>
@@ -172,12 +175,12 @@ function ExplorerFileRow({ doc, tagsData, setTagsData, onOpen, allowTagEdit = tr
         </svg>
         <DocumentIcon ext={ext} className="doc-tree-icon" />
         <span className="file-name" title={doc.filepath}>{doc.filename}</span>
-        {statusLabel && <span className="index-pill pending">{statusLabel}</span>}
         <div className="file-tags">
           {assignedTags.slice(0,2).map(tag => (
             <span key={tag.id} className="tag-pill tag-pill-custom" style={{ background: tag.color, maxWidth: 64 }}>{tag.name}</span>
           ))}
         </div>
+        {pct !== null && <span className="indexing-bar"><span className="indexing-bar-fill" style={{ width: pct + '%' }} /></span>}
       </div>
       {expanded && <FileActionPanel doc={doc} tagsData={tagsData} setTagsData={setTagsData} onOpen={onOpen} allowTagEdit={allowTagEdit} activeTagFlyout={activeTagFlyout} setActiveTagFlyout={setActiveTagFlyout} />}
     </div>
@@ -218,6 +221,7 @@ function ExplorerNode({ name, children, files, depth, tagsData, setTagsData, onO
 function DocCard({ doc, tagsData, setTagsData, onOpen, allowTagEdit = true, activeTagFlyout, setActiveTagFlyout }) {
   const T = useT();
   const lang = React.useContext(LangCtx);
+  const indexProgress = React.useContext(IndexProgressCtx);
   const [expanded, setExpanded] = React.useState(false);
   const ext = (doc.filename.match(/\.([^.]+)$/) || ['',''])[1].toUpperCase();
   const folder = getFolderName(doc.filepath);
@@ -227,6 +231,7 @@ function DocCard({ doc, tagsData, setTagsData, onOpen, allowTagEdit = true, acti
   const extColors = { PDF: ['#ef4444','#fef2f2'], DOC: ['#3b82f6','#eff6ff'], DOCX: ['#3b82f6','#eff6ff'], XLS: ['#10b981','#ecfdf5'], XLSX: ['#10b981','#ecfdf5'], PPT: ['#f59e0b','#fffbeb'], PPTX: ['#f59e0b','#fffbeb'] };
   const [fg, bg] = extColors[ext] || ['var(--fg-faint)','var(--bg-soft)'];
   const statusLabel = indexStatusLabel(doc, lang);
+  const pct = statusLabel ? (indexProgress[doc.doc_id] ?? 0) : null;
   return (
     <div className={'doc-card' + (expanded ? ' expanded' : '') + (statusLabel ? ' indexing' : '')} onClick={() => setExpanded(prev => !prev)}>
       <div className="doc-card-main">
@@ -242,7 +247,7 @@ function DocCard({ doc, tagsData, setTagsData, onOpen, allowTagEdit = true, acti
             {folder && <><span style={{ color: 'var(--accent)' }}>{folder}</span><span className="sep">·</span></>}
             {sizeStr && <><span>{sizeStr}</span>{doc.chunk_count > 0 && <span className="sep">·</span>}</>}
             {doc.chunk_count > 0 && <span>{doc.chunk_count} {T('docs_chunks')}</span>}
-            {statusLabel && <span className="index-pill pending">{statusLabel}</span>}
+            {pct !== null && <span className="indexing-bar" style={{ marginLeft: 'auto' }}><span className="indexing-bar-fill" style={{ width: pct + '%' }} /></span>}
           </div>
           {(folder || assignedTags.length > 0) && (
             <div className="doc-tags">
@@ -280,6 +285,7 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, onWatchDirCh
   const [expandSignal, setExpandSignal] = React.useState({ version: 0, value: true });
   const expandAll = () => setExpandSignal(s => ({ version: s.version + 1, value: true }));
   const collapseAll = () => setExpandSignal(s => ({ version: s.version + 1, value: false }));
+  const [indexProgress, setIndexProgress] = React.useState({});
 
   const fetchDocs = React.useCallback(() => {
     return fetch('/api/documents')
@@ -296,11 +302,17 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, onWatchDirCh
     fetchDocs().finally(() => setLoading(false));
   }, [fetchDocs]);
 
+  const hasPending = docs.some(doc => !isDocIndexed(doc));
+
   React.useEffect(() => {
-    if (!docs.some(doc => !isDocIndexed(doc))) return;
-    const timer = setInterval(fetchDocs, 2000);
-    return () => clearInterval(timer);
-  }, [docs, fetchDocs]);
+    if (!hasPending) { setIndexProgress({}); return; }
+    const fetchProgress = () =>
+      fetch('/api/progress').then(r => r.json()).then(setIndexProgress).catch(() => {});
+    fetchProgress();
+    const docsTimer = setInterval(fetchDocs, 2000);
+    const progTimer = setInterval(fetchProgress, 800);
+    return () => { clearInterval(docsTimer); clearInterval(progTimer); };
+  }, [hasPending, fetchDocs]);
 
   React.useEffect(() => {
     if (addingTag && newTagInputRef.current) newTagInputRef.current.focus();
@@ -486,6 +498,7 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, onWatchDirCh
   }, [filtered, watchedDir, T]);
 
   return (
+    <IndexProgressCtx.Provider value={indexProgress}>
     <section className="docs-view">
       <div className="docs-toolbar">
         <button className="iconbtn" onClick={onBack}><Icon.back /> <span style={{ fontSize: 11 }}>{T('docs_back')}</span></button>
@@ -667,5 +680,6 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, onWatchDirCh
         </div>
       </div>
     </section>
+    </IndexProgressCtx.Provider>
   );
 }

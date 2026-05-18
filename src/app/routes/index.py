@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from app.models import IndexResponse, StatusResponse
 from app.config import DB_PATH
 from app.services.fts import get_stats, get_all_documents
+from indexer.progress import get_all as get_all_progress
 from app.services.qdrant_store import collection_point_count
 from app.services.qdrant_store import delete_doc
 from app.services.fts import delete_document
@@ -78,6 +79,12 @@ async def trigger_index(background_tasks: BackgroundTasks):
         files_skipped=0,
         message="Indexing started in background. Check /api/status for progress.",
     )
+
+
+@router.get("/progress")
+async def get_progress():
+    """Return per-file indexing progress. Keys are doc_ids, values are 0–99."""
+    return get_all_progress()
 
 
 @router.get("/status", response_model=StatusResponse)
