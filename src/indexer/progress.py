@@ -83,8 +83,13 @@ def clear_progress(doc_id: str) -> None:
 
 
 def start_batch(total: int) -> None:
-    """Reset and activate the batch state for a new indexing pass."""
+    """Reset and activate the batch state for a new indexing pass.
+
+    Also drops any per-file entries left over from a previous failed pass
+    so stale `pct: 5` rows can't haunt the UI forever.
+    """
     with _lock:
+        _files.clear()
         _batch.update(
             active=True,
             total=int(total),

@@ -56,13 +56,27 @@ def _doc_id(filepath: str) -> str:
     return hashlib.sha256(filepath.encode()).hexdigest()[:16]
 
 
+def _is_junk_filename(name: str) -> bool:
+    """Skip OS/Office artefacts that have supported extensions but aren't real docs.
+
+    - ``~$foo.xlsx`` — Excel/Word lock files created while a document is open.
+    - ``.~lock.foo.docx#`` — LibreOffice equivalent.
+    - ``._foo.pdf`` — macOS resource-fork shadows on SMB shares.
+    """
+    return name.startswith("~$") or name.startswith("._") or name.startswith(".~lock.")
+
+
 def _needs_index(path: Path, mtime_cache: dict[str, float]) -> bool:
-    """Return True when *path* is missing or newer than what we have indexed."""
+    """Return True when *path* is missing or newer than what we have indexed.
+
+    *path* is expected to be already :py:meth:`Path.resolve`-d so its string
+    form matches whatever was written to ``documents.filepath``.
+    """
     try:
         mtime = path.stat().st_mtime
     except OSError:
         return False
-    known = mtime_cache.get(str(path.resolve()))
+    known = mtime_cache.get(str(path))
     if known is None:
         return True
     return abs(known - mtime) >= 1.0
@@ -209,9 +223,11 @@ def _extract_worker(
             chunks = extract(path, on_page=_page_cb)
         except Exception as exc:
             logger.exception("Extraction failed for %s: %s", path.name, exc)
+            progress.clear_progress(doc_id)
             q.put((path, _EXTRACT_FAILED, None))
             continue
         if not chunks:
+            progress.clear_progress(doc_id)
             q.put((path, _EXTRACT_FAILED, None))
             continue
         stat = path.stat()
@@ -288,8 +304,14 @@ def index_all(directory: Path | None = None) -> Tuple[int, int]:
     for path in directory.rglob("*"):
         if not path.is_file() or path.suffix.lower() not in SUPPORTED_EXTENSIONS:
             continue
-        if _needs_index(path, mtime_cache):
-            todo.append(path)
+        if _is_junk_filename(path.name):
+            continue
+        # Resolve once so the doc_id we emit to progress matches the one
+        # /api/documents derives from resolve()'d paths; otherwise the
+        # frontend can't map per-file progress back to its rows.
+        resolved = path.resolve()
+        if _needs_index(resolved, mtime_cache):
+            todo.append(resolved)
         else:
             skipped += 1
 

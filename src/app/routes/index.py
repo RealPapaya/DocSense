@@ -30,7 +30,7 @@ from app.perf_settings import (
     set_perf_mode,
 )
 from indexer.extractor import SUPPORTED_EXTENSIONS
-from indexer.pipeline import index_all
+from indexer.pipeline import index_all, _is_junk_filename
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -140,6 +140,8 @@ async def list_documents():
     watched_docs_dir.mkdir(parents=True, exist_ok=True)
     for path in watched_docs_dir.rglob("*"):
         if not path.is_file() or path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+            continue
+        if _is_junk_filename(path.name):
             continue
 
         resolved = str(path.resolve())
