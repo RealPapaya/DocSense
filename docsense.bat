@@ -36,7 +36,7 @@ if exist "%VENV_PY%" (
 :: does not stop the search too early.
 where py >nul 2>&1
 if not errorlevel 1 (
-    for %%v in (3.13 3.12 3.11 3.10) do (
+    for %%v in (3.14 3.13 3.12 3.11 3.10) do (
         if not defined PY (
             for /f "delims=" %%i in ('py -%%v -c "import sys;print(sys.executable)" 2^>nul') do (
                 set "PY=%%i"
@@ -46,8 +46,8 @@ if not errorlevel 1 (
     if defined PY goto :CHECK_VERSION
 )
 
-:: Standard installation directories -- checks Python 3.10 .. 3.13
-for %%v in (313 312 311 310) do (
+:: Standard installation directories -- checks Python 3.10 .. 3.14
+for %%v in (314 313 312 311 310) do (
     if exist "%LOCALAPPDATA%\Programs\Python\Python%%v\python.exe" (
         set "PY=%LOCALAPPDATA%\Programs\Python\Python%%v\python.exe"
         goto :CHECK_VERSION
@@ -116,17 +116,11 @@ if errorlevel 1 (
     echo.
     if /i "!PY!"=="%VENV_PY%" (
         echo  The existing .venv was created with an older Python.
-        echo  Install Python 3.10 or newer, then delete .venv and run this again.
+        echo  Install Python 3.10 or newer, then delete only this app's .venv folder.
+        echo  Do not uninstall your older system Python unless you want to.
         echo.
     )
-    echo  Download the latest Python from:
-    echo    https://www.python.org/downloads/
-    echo.
-    echo  During installation check:
-    echo    [v] Add Python to PATH
-    echo    [v] Install for all users  ^(recommended^)
-    echo.
-    pause
+    call :PYTHON_INSTALL_HELP
     exit /b 1
 )
 
@@ -226,14 +220,30 @@ if defined OLD_PY (
     echo     !OLD_PY!
 )
 echo.
-echo   Download the latest Python:
-echo     https://www.python.org/downloads/
+call :PYTHON_INSTALL_HELP
+exit /b 1
+
+
+:: =============================================================================
+:: SUBROUTINE: Friendly Python install guidance
+:: =============================================================================
+:PYTHON_INSTALL_HELP
+echo   Install Python 3.10 or newer, then run this launcher again.
+echo.
+echo   You can keep older Python versions such as Python 3.6.8 installed.
+echo   Installing a newer Python side-by-side is OK.
 echo.
 echo   During installation, make sure to check:
 echo     [v] Add Python to PATH
-echo     [v] Install for all users  (recommended)
+echo     [v] Install for all users  ^(recommended^)
 echo.
-echo   After installing Python, run this launcher again.
+echo   Options:
+echo     [D] Open the official Python download page
+echo     [Enter] Close this window
 echo.
-pause
-exit /b 1
+set "_PY_HELP="
+set /p "_PY_HELP=  Choose an option: "
+if /i "!_PY_HELP!"=="D" (
+    start "" "https://www.python.org/downloads/"
+)
+exit /b 0
