@@ -306,6 +306,8 @@ body {
 }
 .searchrow:has(.path-scope-control.open) {
   overflow: visible;
+  position: relative;
+  z-index: 10;
 }
 .searchrow.closed {
   max-height: 0;
