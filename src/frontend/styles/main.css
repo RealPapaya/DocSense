@@ -2030,6 +2030,55 @@ span.doc-tree-icon {
   flex-shrink: 0;
 }
 
+/* Doc card / explorer row checkbox */
+.doc-checkbox {
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; width: 18px; height: 18px; cursor: pointer;
+  opacity: 0; transition: opacity 0.1s;
+  user-select: none;
+}
+.doc-card:hover .doc-checkbox,
+.explorer-file-row:hover .doc-checkbox,
+.explorer-folder-row:hover .doc-checkbox,
+.doc-selected .doc-checkbox { opacity: 1; }
+.doc-checkbox-box {
+  width: 14px; height: 14px; border-radius: 3px;
+  border: 1.5px solid var(--border); background: var(--bg);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  transition: border-color 0.1s, background 0.1s;
+}
+.doc-checkbox-box.checked {
+  border-color: var(--accent); background: var(--accent);
+}
+.doc-checkbox-box.partial {
+  border-color: var(--accent); background: var(--accent-soft);
+}
+.doc-checkbox-box svg { width: 8px; height: 8px; }
+.doc-checkbox-box.checked svg { stroke: white; }
+.doc-checkbox-box.partial svg { stroke: var(--accent); }
+.doc-selected { background: var(--bg-selected) !important; }
+.doc-selected:hover { background: var(--bg-selected-strong) !important; }
+.doc-card, .explorer-file-row, .explorer-folder-row { user-select: none; }
+
+/* Bulk action bar */
+.bulk-action-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 14px; border-bottom: 1px solid var(--border);
+  background: var(--accent-soft); flex-shrink: 0;
+}
+.bulk-count {
+  font-family: var(--font-mono); font-size: 11px; color: var(--accent); font-weight: 600;
+}
+.bulk-tag-wrap { position: relative; }
+.bulk-tag-btn { font-size: 11.5px; }
+.bulk-tag-dropdown {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 300;
+  min-width: 180px; background: var(--bg-elev);
+  border: 1px solid var(--border); border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  padding: 4px 0; overflow: hidden;
+}
+
 /* Tag pills */
 .tag-pill {
   display: inline-flex; align-items: center; gap: 3px;

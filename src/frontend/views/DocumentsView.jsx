@@ -212,7 +212,7 @@ function FileActionPanel({ doc, tagsData, setTagsData, onOpen, allowTagEdit = tr
   );
 }
 
-function ExplorerFileRow({ doc, tagsData, setTagsData, onOpen, allowTagEdit = true, activeTagFlyout, setActiveTagFlyout }) {
+function ExplorerFileRow({ doc, tagsData, setTagsData, onOpen, allowTagEdit = true, activeTagFlyout, setActiveTagFlyout, selected, onSelect, orderedIds }) {
   const lang = React.useContext(LangCtx);
   const indexProgress = React.useContext(IndexProgressCtx);
   const [expanded, setExpanded] = React.useState(false);
@@ -221,9 +221,24 @@ function ExplorerFileRow({ doc, tagsData, setTagsData, onOpen, allowTagEdit = tr
   const assignedTags = tagsData.customTags.filter(t => assigned.includes(t.id));
   const statusLabel = indexStatusLabel(doc, lang);
   const pct = statusLabel ? _docPct(indexProgress, doc.doc_id) : null;
+
+  const handleRowClick = (e) => {
+    if (e.shiftKey || e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      if (onSelect) onSelect(doc.doc_id, e, orderedIds);
+      return;
+    }
+    setExpanded(prev => !prev);
+  };
+
   return (
-    <div className={'explorer-file-item' + (expanded ? ' expanded' : '')}>
-      <div className={'explorer-file-row' + (statusLabel ? ' indexing' : '')} onClick={() => setExpanded(prev => !prev)}>
+    <div className={'explorer-file-item' + (expanded ? ' expanded' : '') + (selected ? ' doc-selected' : '')}>
+      <div className={'explorer-file-row' + (statusLabel ? ' indexing' : '')} onClick={handleRowClick}>
+        <div className="doc-checkbox" onClick={e => { e.stopPropagation(); if (onSelect) onSelect(doc.doc_id, e, orderedIds); }}>
+          <div className={'doc-checkbox-box' + (selected ? ' checked' : '')}>
+            {selected && <svg viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1.5,5 4,7.5 8.5,2.5"/></svg>}
+          </div>
+        </div>
         <svg className="caret" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6">
           <polyline points="3,1.5 7,5 3,8.5" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
@@ -241,16 +256,31 @@ function ExplorerFileRow({ doc, tagsData, setTagsData, onOpen, allowTagEdit = tr
   );
 }
 
-function ExplorerNode({ name, children, files, depth, tagsData, setTagsData, onOpenFile, allowTagEdit = true, activeTagFlyout, setActiveTagFlyout, expandSignal }) {
+function _collectDocIds(node) {
+  const ids = node.files.map(f => f.doc_id);
+  Object.values(node.children).forEach(child => ids.push(..._collectDocIds(child)));
+  return ids;
+}
+
+function ExplorerNode({ name, children, files, depth, tagsData, setTagsData, onOpenFile, allowTagEdit = true, activeTagFlyout, setActiveTagFlyout, expandSignal, selectedIds, onSelect, onSelectFolder, orderedIds }) {
   const [open, setOpen] = React.useState(depth === 0);
   React.useEffect(() => {
     if (expandSignal && expandSignal.version > 0) setOpen(expandSignal.value);
   }, [expandSignal && expandSignal.version]);
   const childEntries = Object.entries(children).sort(([a],[b]) => a.localeCompare(b));
   const totalCount = _countFiles({ children, files });
+  const folderDocIds = React.useMemo(() => _collectDocIds({ children, files }), [children, files]);
+  const allSelected = selectedIds && folderDocIds.length > 0 && folderDocIds.every(id => selectedIds.has(id));
+  const someSelected = selectedIds && !allSelected && folderDocIds.some(id => selectedIds.has(id));
   return (
     <div>
-      <div className={'explorer-folder-row' + (open ? ' open' : '')} onClick={() => setOpen(!open)}>
+      <div className={'explorer-folder-row' + (open ? ' open' : '') + (allSelected ? ' doc-selected' : '')} onClick={() => setOpen(!open)}>
+        <div className="doc-checkbox" onClick={e => { e.stopPropagation(); if (onSelectFolder) onSelectFolder(folderDocIds, allSelected); }}>
+          <div className={'doc-checkbox-box' + (allSelected ? ' checked' : '') + (someSelected ? ' partial' : '')}>
+            {allSelected && <svg viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1.5,5 4,7.5 8.5,2.5"/></svg>}
+            {someSelected && <svg viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="2" y1="5" x2="8" y2="5"/></svg>}
+          </div>
+        </div>
         <svg className="caret" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6">
           <polyline points="3,1.5 7,5 3,8.5" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
@@ -260,11 +290,11 @@ function ExplorerNode({ name, children, files, depth, tagsData, setTagsData, onO
       </div>
       {open && (
         <div className="explorer-children">
-                    {childEntries.map(([n, node]) => (
-            <ExplorerNode key={n} name={n} {...node} depth={depth+1} tagsData={tagsData} setTagsData={setTagsData} onOpenFile={onOpenFile} allowTagEdit={allowTagEdit} activeTagFlyout={activeTagFlyout} setActiveTagFlyout={setActiveTagFlyout} expandSignal={expandSignal} />
+          {childEntries.map(([n, node]) => (
+            <ExplorerNode key={n} name={n} {...node} depth={depth+1} tagsData={tagsData} setTagsData={setTagsData} onOpenFile={onOpenFile} allowTagEdit={allowTagEdit} activeTagFlyout={activeTagFlyout} setActiveTagFlyout={setActiveTagFlyout} expandSignal={expandSignal} selectedIds={selectedIds} onSelect={onSelect} onSelectFolder={onSelectFolder} orderedIds={orderedIds} />
           ))}
           {files.map(doc => (
-            <ExplorerFileRow key={doc.doc_id} doc={doc} tagsData={tagsData} setTagsData={setTagsData} onOpen={onOpenFile} allowTagEdit={allowTagEdit} activeTagFlyout={activeTagFlyout} setActiveTagFlyout={setActiveTagFlyout} />
+            <ExplorerFileRow key={doc.doc_id} doc={doc} tagsData={tagsData} setTagsData={setTagsData} onOpen={onOpenFile} allowTagEdit={allowTagEdit} activeTagFlyout={activeTagFlyout} setActiveTagFlyout={setActiveTagFlyout} selected={selectedIds && selectedIds.has(doc.doc_id)} onSelect={onSelect} orderedIds={orderedIds} />
           ))}
         </div>
       )}
@@ -272,7 +302,7 @@ function ExplorerNode({ name, children, files, depth, tagsData, setTagsData, onO
   );
 }
 
-function DocCard({ doc, tagsData, setTagsData, onOpen, allowTagEdit = true, activeTagFlyout, setActiveTagFlyout }) {
+function DocCard({ doc, tagsData, setTagsData, onOpen, allowTagEdit = true, activeTagFlyout, setActiveTagFlyout, selected, onSelect, orderedIds }) {
   const T = useT();
   const lang = React.useContext(LangCtx);
   const indexProgress = React.useContext(IndexProgressCtx);
@@ -286,9 +316,24 @@ function DocCard({ doc, tagsData, setTagsData, onOpen, allowTagEdit = true, acti
   const [fg, bg] = extColors[ext] || ['var(--fg-faint)','var(--bg-soft)'];
   const statusLabel = indexStatusLabel(doc, lang);
   const pct = statusLabel ? _docPct(indexProgress, doc.doc_id) : null;
+
+  const handleCardClick = (e) => {
+    if (e.shiftKey || e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      if (onSelect) onSelect(doc.doc_id, e, orderedIds);
+      return;
+    }
+    setExpanded(prev => !prev);
+  };
+
   return (
-    <div className={'doc-card' + (expanded ? ' expanded' : '') + (statusLabel ? ' indexing' : '')} onClick={() => setExpanded(prev => !prev)}>
+    <div className={'doc-card' + (expanded ? ' expanded' : '') + (statusLabel ? ' indexing' : '') + (selected ? ' doc-selected' : '')} onClick={handleCardClick}>
       <div className="doc-card-main">
+        <div className="doc-checkbox" onClick={e => { e.stopPropagation(); if (onSelect) onSelect(doc.doc_id, e, orderedIds); }}>
+          <div className={'doc-checkbox-box' + (selected ? ' checked' : '')}>
+            {selected && <svg viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1.5,5 4,7.5 8.5,2.5"/></svg>}
+          </div>
+        </div>
         <svg className="caret" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6">
           <polyline points="3,1.5 7,5 3,8.5" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
@@ -427,6 +472,10 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, watchedDirs,
   const [activeTagFlyout, setActiveTagFlyout] = React.useState(null);
     const newTagInputRef = React.useRef(null);
   const [filterText, setFilterText] = React.useState('');
+  const [selectedIds, setSelectedIds] = React.useState(new Set());
+  const [lastSelectedId, setLastSelectedId] = React.useState(null);
+  const [bulkTagOpen, setBulkTagOpen] = React.useState(false);
+  const bulkTagRef = React.useRef(null);
   const [expandSignal, setExpandSignal] = React.useState({ version: 0, value: true });
   const expandAll = () => setExpandSignal(s => ({ version: s.version + 1, value: true }));
   const collapseAll = () => setExpandSignal(s => ({ version: s.version + 1, value: false }));
@@ -624,6 +673,68 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, watchedDirs,
     }
     setWatchPathsOpen(false);
   }, [draftWatchPaths, watchPaths, confirm, T]);
+
+  // Close bulk tag dropdown on outside click
+  React.useEffect(() => {
+    if (!bulkTagOpen) return;
+    const handler = (e) => { if (bulkTagRef.current && !bulkTagRef.current.contains(e.target)) setBulkTagOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [bulkTagOpen]);
+
+  const handleSelectDoc = React.useCallback((docId, e, orderedIds) => {
+    const isShift = e && e.shiftKey;
+    const isCtrl = e && (e.ctrlKey || e.metaKey);
+    setSelectedIds(prev => {
+      if (isShift && lastSelectedId && orderedIds) {
+        const a = orderedIds.indexOf(lastSelectedId);
+        const b = orderedIds.indexOf(docId);
+        if (a !== -1 && b !== -1) {
+          const lo = Math.min(a, b), hi = Math.max(a, b);
+          const range = new Set(orderedIds.slice(lo, hi + 1));
+          const next = new Set(prev);
+          range.forEach(id => next.add(id));
+          return next;
+        }
+      }
+      const next = new Set(prev);
+      if (isCtrl) {
+        if (next.has(docId)) next.delete(docId); else next.add(docId);
+      } else {
+        if (next.size === 1 && next.has(docId)) next.delete(docId);
+        else { next.clear(); next.add(docId); }
+      }
+      return next;
+    });
+    setLastSelectedId(docId);
+  }, [lastSelectedId]);
+
+  const clearSelection = React.useCallback(() => {
+    setSelectedIds(new Set());
+    setLastSelectedId(null);
+  }, []);
+
+  const handleSelectFolder = React.useCallback((docIds, allSelected) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allSelected) docIds.forEach(id => next.delete(id));
+      else docIds.forEach(id => next.add(id));
+      return next;
+    });
+  }, []);
+
+  const bulkAssignTag = React.useCallback((tagId) => {
+    const assignments = { ...(tagsData.assignments || {}) };
+    selectedIds.forEach(docId => {
+      const cur = assignments[docId] || [];
+      if (!cur.includes(tagId)) assignments[docId] = [...cur, tagId];
+    });
+    const nd = { ...tagsData, assignments };
+    setTagsData(nd);
+    saveTagsData(nd);
+    setBulkTagOpen(false);
+    clearSelection();
+  }, [tagsData, setTagsData, selectedIds, clearSelection]);
 
   const filtered = React.useMemo(() => {
     let ds = docs;
@@ -926,7 +1037,37 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, watchedDirs,
         </div>
 
         {/* Main content */}
-        <div className="docs-body" style={{ flex: 1 }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {selectedIds.size > 0 && (
+            <div className="bulk-action-bar">
+              <span className="bulk-count">{selectedIds.size} {T('docs_selected')}</span>
+              <div className="bulk-tag-wrap" ref={bulkTagRef}>
+                <button className="iconbtn bulk-tag-btn" onClick={() => setBulkTagOpen(o => !o)}>
+                  <DocumentIcon name="tag" />
+                  {T('docs_bulk_tag')}
+                  <svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><polyline points="2,3.5 5,6.5 8,3.5"/></svg>
+                </button>
+                {bulkTagOpen && (
+                  <div className="bulk-tag-dropdown">
+                    {tagsData.customTags.length === 0
+                      ? <div className="fap-flyout-empty">{T('docs_no_tags')}</div>
+                      : tagsData.customTags.map(tag => (
+                          <button key={tag.id} className="fap-tag-item" onClick={() => bulkAssignTag(tag.id)}>
+                            <span className="fap-dot" style={{ background: tag.color }}></span>
+                            <span className="fap-tag-name">{tag.name}</span>
+                          </button>
+                        ))
+                    }
+                  </div>
+                )}
+              </div>
+              <button className="iconbtn" onClick={clearSelection} style={{ marginLeft: 'auto' }}>
+                <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M3 3l8 8M11 3l-8 8"/></svg>
+                {T('docs_clear_selection')}
+              </button>
+            </div>
+          )}
+          <div className="docs-body">
           <IndexingHeader progress={indexProgress} />
           {loading ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}>
@@ -940,22 +1081,27 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, watchedDirs,
                 <div className="hint">{T('docs_empty_hint')}</div>
               </div>
             </div>
-          ) : viewMode === 'explorer' ? (
-                        <div className="explorer-root">
-              {Object.entries(tree.children).sort(([a],[b]) => a.localeCompare(b)).map(([n, node]) => (
-                <ExplorerNode key={n} name={n} {...node} depth={0} tagsData={tagsData} setTagsData={setTagsData} onOpenFile={openDoc} allowTagEdit={true} activeTagFlyout={activeTagFlyout} setActiveTagFlyout={setActiveTagFlyout} expandSignal={expandSignal} />
-              ))}
-              {tree.files.map(doc => (
-                <ExplorerFileRow key={doc.doc_id} doc={doc} tagsData={tagsData} setTagsData={setTagsData} onOpen={openDoc} allowTagEdit={true} activeTagFlyout={activeTagFlyout} setActiveTagFlyout={setActiveTagFlyout} />
-              ))}
-            </div>
-          ) : (
+          ) : viewMode === 'explorer' ? (() => {
+              const explorerIds = filtered.map(d => d.doc_id);
+              return (
+                <div className="explorer-root">
+                  {Object.entries(tree.children).sort(([a],[b]) => a.localeCompare(b)).map(([n, node]) => (
+                    <ExplorerNode key={n} name={n} {...node} depth={0} tagsData={tagsData} setTagsData={setTagsData} onOpenFile={openDoc} allowTagEdit={true} activeTagFlyout={activeTagFlyout} setActiveTagFlyout={setActiveTagFlyout} expandSignal={expandSignal} selectedIds={selectedIds} onSelect={handleSelectDoc} onSelectFolder={handleSelectFolder} orderedIds={explorerIds} />
+                  ))}
+                  {tree.files.map(doc => (
+                    <ExplorerFileRow key={doc.doc_id} doc={doc} tagsData={tagsData} setTagsData={setTagsData} onOpen={openDoc} allowTagEdit={true} activeTagFlyout={activeTagFlyout} setActiveTagFlyout={setActiveTagFlyout} selected={selectedIds.has(doc.doc_id)} onSelect={handleSelectDoc} orderedIds={explorerIds} />
+                  ))}
+                </div>
+              );
+            })()
+          : (
             <div className="doc-grid">
               {filtered.map(doc => (
-                <DocCard key={doc.doc_id} doc={doc} tagsData={tagsData} setTagsData={setTagsData} onOpen={openDoc} allowTagEdit={true} activeTagFlyout={activeTagFlyout} setActiveTagFlyout={setActiveTagFlyout} />
+                <DocCard key={doc.doc_id} doc={doc} tagsData={tagsData} setTagsData={setTagsData} onOpen={openDoc} allowTagEdit={true} activeTagFlyout={activeTagFlyout} setActiveTagFlyout={setActiveTagFlyout} selected={selectedIds.has(doc.doc_id)} onSelect={handleSelectDoc} orderedIds={filtered.map(d => d.doc_id)} />
               ))}
             </div>
           )}
+          </div>
         </div>
       </div>
     </section>
