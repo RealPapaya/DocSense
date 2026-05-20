@@ -440,8 +440,14 @@ async def get_chunks(doc_id: str):
 
 
 @router.post("/open/{doc_id}")
-async def open_file_native(doc_id: str):
-    """Open a non-PDF file with the OS default application via os.startfile()."""
+async def open_file_native(doc_id: str, page: int = Query(0)):
+    """Open a non-PDF file with the OS default application.
+
+    For .docx files on Windows, if *page* > 0 and WINWORD.EXE is available,
+    Word is launched with the ``/n /t <page>`` flags so the document opens
+    directly at the requested page.  Falls back to ``os.startfile`` when Word
+    is not found or the platform is not Windows.
+    """
     con = sqlite3.connect(str(DB_PATH))
     try:
         row = con.execute(
@@ -456,6 +462,16 @@ async def open_file_native(doc_id: str):
     path = Path(row[0])
     if not path.is_file():
         raise HTTPException(status_code=410, detail="file no longer on disk")
+
+    # On Windows, open .docx at the requested page via WINWORD /n /t <page>.
+    if path.suffix.lower() == ".docx" and page > 0 and os.name == "nt":
+        import shutil
+        import subprocess
+        winword = shutil.which("WINWORD") or shutil.which("winword")
+        if winword:
+            subprocess.Popen([winword, str(path), "/n", "/t", str(page)])
+            return JSONResponse({"status": "ok", "page": page})
+        # WINWORD not on PATH — fall through to os.startfile
 
     os.startfile(str(path))
     return JSONResponse({"status": "ok"})

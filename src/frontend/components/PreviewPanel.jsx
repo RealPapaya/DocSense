@@ -191,14 +191,15 @@ function PreviewPanel({ result, results = [], onSelect, bookmarks = {}, setBookm
     return '/api/file/' + encodeURIComponent(result.doc_id) + q + hash;
   };
 
-  const openFile = () => {
+    const openFile = () => {
     const fp = result.filepath || '';
     const isPdf = fp.toLowerCase().endsWith('.pdf');
     if (isPdf) {
       const url = fileUrl(false);
       if (url) window.open(url, '_blank', 'noopener');
     } else if (result.doc_id) {
-      fetch('/api/open/' + encodeURIComponent(result.doc_id), { method: 'POST' });
+      const pageParam = result.page ? '?page=' + result.page : '';
+      fetch('/api/open/' + encodeURIComponent(result.doc_id) + pageParam, { method: 'POST' });
     }
   };
 
