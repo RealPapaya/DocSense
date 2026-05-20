@@ -15,6 +15,11 @@ on:
         required: false
         default: "v0.0.0-dev"
 
+# Explicitly grant the built-in GITHUB_TOKEN permission to create releases.
+# Without this, GitHub's default "read" token policy returns HTTP 403.
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     name: Build Windows EXE
