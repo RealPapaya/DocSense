@@ -102,7 +102,7 @@ function RelatedTab({ result, results = [], onSelect }) {
                 onMouseLeave={e => { if (!isCurrent && !isInline) e.currentTarget.style.background = 'var(--bg-soft)'; }}
               >
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-faint)', flexShrink: 0, minWidth: 40 }}>
-                  {lang === 'zh' ? '頁 ' : 'p.'}{chunk.page || '-'}
+                  {pageLabel(chunk.page)}
                 </span>
                 <span style={{ color: 'var(--fg-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontSize: 11.5 }}>
                   {(chunk.preview || chunk.text || '').slice(0, 80)}
@@ -175,6 +175,9 @@ function PreviewPanel({ result, results = [], onSelect, bookmarks = {}, setBookm
 
   const bmKey = bookmarkKey(result.doc_id, result.page);
   const isBookmarked = !!bookmarks[bmKey];
+  const numericPage = pageNumber(result.page);
+  const prevPageLabel = numericPage > 1 ? pageLabel(numericPage - 1) : '-';
+  const nextPageLabel = numericPage ? pageLabel(numericPage + 1) : pageLabel(result.page);
 
   const toggleBookmark = () => {
     const next = { ...bookmarks };
@@ -187,7 +190,7 @@ function PreviewPanel({ result, results = [], onSelect, bookmarks = {}, setBookm
   const fileUrl = (download) => {
     if (!result.doc_id) return null;
     const q = download ? '?download=1' : '';
-    const hash = !download && result.page ? '#page=' + result.page : '';
+    const hash = !download && numericPage ? '#page=' + numericPage : '';
     return '/api/file/' + encodeURIComponent(result.doc_id) + q + hash;
   };
 
@@ -198,7 +201,7 @@ function PreviewPanel({ result, results = [], onSelect, bookmarks = {}, setBookm
       const url = fileUrl(false);
       if (url) window.open(url, '_blank', 'noopener');
     } else if (result.doc_id) {
-      const pageParam = result.page ? '?page=' + result.page : '';
+      const pageParam = numericPage ? '?page=' + numericPage : '';
       fetch('/api/open/' + encodeURIComponent(result.doc_id) + pageParam, { method: 'POST' });
     }
   };
@@ -216,7 +219,7 @@ function PreviewPanel({ result, results = [], onSelect, bookmarks = {}, setBookm
   };
 
   const copyCitation = async () => {
-    const cite = result.spec + (result.page ? ', p. ' + result.page : '');
+    const cite = result.spec + (result.page ? ', ' + pageLabel(result.page) : '');
     try {
       await navigator.clipboard.writeText(cite);
       showCopied('citation');
@@ -224,23 +227,21 @@ function PreviewPanel({ result, results = [], onSelect, bookmarks = {}, setBookm
   };
 
   const fused = result.score, bm = result.bm25, sem = result.semantic;
-  const metaJson = [
-    '{',
-    '  "doc_id":      "' + result.specShort.toLowerCase() + '",',
-    '  "vendor":      "' + result.vendor + '",',
-    '  "spec_type":   "' + result.type + '",',
-    '  "category":    "' + result.category + '",',
-    '  "version":     "' + result.version + '",',
-    '  "published":   "' + result.date + '",',
-    '  "page":        ' + result.page + ',',
-    '  "section":     "' + result.section + '",',
-    '  "chunk_id":    "' + result.id + '_p' + result.page + '_s4",',
-    '  "tokens":      342,',
-    '  "lang":        "en-US",',
-    '  "embedder":    "bge-large-en-v1.5",',
-    '  "fused_score": ' + result.score,
-    '}'
-  ].join('\n');
+  const metaJson = JSON.stringify({
+    doc_id: result.specShort.toLowerCase(),
+    vendor: result.vendor,
+    spec_type: result.type,
+    category: result.category,
+    version: result.version,
+    published: result.date,
+    page: result.page,
+    section: result.section,
+    chunk_id: result.id + '_p' + result.page + '_s4',
+    tokens: 342,
+    lang: 'en-US',
+    embedder: 'bge-large-en-v1.5',
+    fused_score: result.score,
+  }, null, 2);
 
   return (
     <section className="preview">
@@ -259,7 +260,7 @@ function PreviewPanel({ result, results = [], onSelect, bookmarks = {}, setBookm
             <Icon.external /> {T('open')}
           </button>
         </div>
-        <div className="metaitem align-right"><span className="l">{T('meta_page')}</span><span className="v mono">{result.page}</span></div>
+        <div className="metaitem align-right"><span className="l">{T('meta_page')}</span><span className="v mono">{result.page || '-'}</span></div>
       </div>
 
       <div className="preview-scoring">
@@ -287,12 +288,12 @@ function PreviewPanel({ result, results = [], onSelect, bookmarks = {}, setBookm
       <div className="preview-body preview-text">
         {tab === 'context' && <>
           <div className="ctx-block">
-            <div className="ctx-label">{T('ctx_preceding')} · {T('page_short')} {result.page - 1}</div>
+            <div className="ctx-label">{T('ctx_preceding')} · {prevPageLabel}</div>
             {highlightText(result.context.before, [])}
           </div>
           <div className="ctx-block match">
             <div className="ctx-label">
-              {T('ctx_matched')} · {T('page_short')} {result.page}
+              {T('ctx_matched')} · {pageLabel(result.page)}
               {result.view === 'occurrences' && Number.isFinite(result.matchPosition) && (
                 <span className="ctx-occ-pos"> · {T('match_at')} #{result.matchPosition}</span>
               )}
@@ -303,7 +304,7 @@ function PreviewPanel({ result, results = [], onSelect, bookmarks = {}, setBookm
             {highlightText(result.context.match, result.matchHighlight || result.highlight)}
           </div>
           <div className="ctx-block">
-            <div className="ctx-label">{T('ctx_following')} · {T('page_short')} {result.page + 1}</div>
+            <div className="ctx-label">{T('ctx_following')} · {nextPageLabel}</div>
             {highlightText(result.context.after, [])}
           </div>
         </>}

@@ -17,7 +17,7 @@ class SearchResult(BaseModel):
     filename: str
     filepath: str
     chunk_text: str
-    page: Optional[int] = None
+    page: Optional[int | str] = None
     score: float
     bm25_score: float = 0.0
     semantic_score: float = 0.0

@@ -42,11 +42,11 @@ function BookmarksView({ bookmarks, setBookmarks, onBack }) {
     const fp = b.filepath || b.filename || '';
     const isPdf = fp.toLowerCase().endsWith('.pdf');
     if (!isPdf) {
-      const pageParam = b.page ? '?page=' + b.page : '';
+      const pageParam = pageNumber(b.page) ? '?page=' + pageNumber(b.page) : '';
       fetch('/api/open/' + encodeURIComponent(b.doc_id) + pageParam, { method: 'POST' });
       return;
     }
-    const hash = b.page ? '#page=' + b.page : '';
+    const hash = pageNumber(b.page) ? '#page=' + pageNumber(b.page) : '';
     window.open('/api/file/' + encodeURIComponent(b.doc_id) + hash, '_blank', 'noopener');
   };
 
@@ -127,9 +127,9 @@ function BookmarksView({ bookmarks, setBookmarks, onBack }) {
                       )}
                     </div>
                     <div className="result-row2">
-                      {b.page > 0 && (
+                      {b.page && (
                         <>
-                          <span className="pg">{T('page_short')} {b.page}</span>
+                          <span className="pg">{pageLabel(b.page)}</span>
                           <span className="sep">·</span>
                         </>
                       )}

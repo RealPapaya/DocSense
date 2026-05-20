@@ -46,7 +46,7 @@ function OccurrenceRow({ result, index, selected, onSelect }) {
       <div className="occ-num">#{String(index + 1).padStart(4, '0')}</div>
       {result.type && <DocumentIcon ext={result.type} className="file-type-icon" fallbackText={result.type} />}
       <span className="occ-spec" title={result.specShort}>{result.spec}</span>
-      <span className="occ-page">{result.page ? ('p.' + result.page) : '-'}</span>
+      <span className="occ-page">{pageLabel(result.page)}</span>
       <span className="occ-snippet">{highlightText(result.snippet || result.excerpt, result.snippetHighlight || result.highlight)}</span>
     </div>
   );

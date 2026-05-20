@@ -9,6 +9,8 @@ a token-budget limit when embedding.
 """
 from __future__ import annotations
 from pathlib import Path
+import json
+import os
 from typing import Callable, List, Dict, Any, Optional, Iterable
 
 from app.config import CHUNK_SIZE, CHUNK_OVERLAP
@@ -61,6 +63,10 @@ def _extract_pdf(path: Path, on_page: PageCallback = None) -> List[Dict[str, Any
 
 
 def _extract_docx(path: Path) -> List[Dict[str, Any]]:
+    word_chunks = _extract_docx_with_word(path)
+    if word_chunks:
+        return word_chunks
+
     from docx import Document
     doc = Document(str(path))
 
@@ -128,6 +134,94 @@ def _docx_paragraph_starts_next_page(element: Any) -> bool:
     return value in (None, "nextPage", "oddPage", "evenPage")
 
 
+def _extract_docx_with_word(path: Path) -> List[Dict[str, Any]]:
+    if os.name != "nt":
+        return []
+
+    import base64
+    import shutil
+    import subprocess
+
+    powershell = shutil.which("powershell") or shutil.which("powershell.exe")
+    if not powershell:
+        return []
+
+    quoted_path = str(path).replace("'", "''")
+    script = f"""
+$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$word = New-Object -ComObject Word.Application
+$word.Visible = $false
+$doc = $null
+try {{
+  $doc = $word.Documents.Open('{quoted_path}', $false, $true)
+  $items = @()
+  foreach ($paragraph in $doc.Paragraphs) {{
+    $text = $paragraph.Range.Text -replace '[\r\a]+$', ''
+    $text = $text.Trim()
+    if ($text.Length -gt 0) {{
+      $items += [pscustomobject]@{{
+        page = [int]$paragraph.Range.Information(3)
+        text = $text
+      }}
+    }}
+  }}
+  $items | ConvertTo-Json -Compress -Depth 3
+}} finally {{
+  if ($doc -ne $null) {{ $doc.Close($false) }}
+  $word.Quit()
+  [System.Runtime.InteropServices.Marshal]::ReleaseComObject($word) | Out-Null
+}}
+"""
+    encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
+    try:
+        proc = subprocess.run(
+            [
+                powershell,
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-EncodedCommand",
+                encoded,
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=120,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except Exception:
+        return []
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return []
+
+    try:
+        raw = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return []
+    items = raw if isinstance(raw, list) else [raw]
+
+    pages: dict[int, List[str]] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get("text") or "").strip()
+        if not text:
+            continue
+        try:
+            page = int(item.get("page") or 1)
+        except (TypeError, ValueError):
+            page = 1
+        pages.setdefault(max(page, 1), []).append(text)
+
+    results: List[Dict[str, Any]] = []
+    for page_num, parts in pages.items():
+        for chunk in _chunk("\n".join(parts)):
+            results.append({"text": chunk, "page": page_num})
+    return results
+
+
 def _extract_xlsx(path: Path) -> List[Dict[str, Any]]:
     import openpyxl
     results = []
@@ -143,7 +237,7 @@ def _extract_xlsx(path: Path) -> List[Dict[str, Any]]:
                 rows.append(row_text)
         sheet_text = f"[Sheet: {sheet_name}]\n" + "\n".join(rows)
         for chunk in _chunk(sheet_text):
-            results.append({"text": chunk, "page": None})
+            results.append({"text": chunk, "page": sheet_name})
     wb.close()
     return results
 

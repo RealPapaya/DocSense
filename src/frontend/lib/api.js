@@ -17,6 +17,21 @@ function spansForWindow(spans, start, end) {
     }));
 }
 
+function isNumericPage(page) {
+  if (typeof page === 'number') return Number.isFinite(page) && page > 0;
+  if (typeof page === 'string' && page.trim()) return /^[1-9]\d*$/.test(page.trim());
+  return false;
+}
+
+function pageNumber(page) {
+  return isNumericPage(page) ? Number(page) : 0;
+}
+
+function pageLabel(page) {
+  if (isNumericPage(page)) return 'p.' + pageNumber(page);
+  return page ? String(page) : '-';
+}
+
 function mapResult(r, query, index) {
   const nameNoExt = r.filename.replace(/\.[^.]+$/, '');
   const ext = (r.filename.match(/\.([^.]+)$/) || ['', ''])[1].toUpperCase();
@@ -41,7 +56,7 @@ function mapResult(r, query, index) {
     version:       '',
     date:          '',
     page:          r.page || 0,
-    section:       r.page ? 'Page ' + r.page : '',
+    section:       r.page ? pageLabel(r.page) : '',
     excerpt:       excerpt,
     highlight:     excerptSpans,
     excerptHighlight: excerptSpans,
@@ -81,7 +96,7 @@ function mapOccurrence(r, query, index) {
     version:       '',
     date:          '',
     page:          r.page || 0,
-    section:       r.page ? 'Page ' + r.page : '',
+    section:       r.page ? pageLabel(r.page) : '',
     excerpt:       snippet,
     snippet:       snippet,
     highlight:     snippetSpans,
