@@ -10,9 +10,9 @@ whole_word    : bool                              (default: false)
 match_case    : bool                              (default: false)
 related_terms : repeated string params; OR-expanded with the base query
 path_prefix   : repeated filesystem path prefixes to restrict search scope
-limit         : optional result cap; documents view returns every match when omitted,
-                occurrences view defaults to 200 per page
-offset        : pagination offset (occurrences view only)
+limit         : optional result cap; documents and occurrences views use safe
+                defaults and hard caps when omitted
+offset        : pagination offset
 """
 from __future__ import annotations
 
@@ -26,17 +26,20 @@ from fastapi import APIRouter, HTTPException, Query
 from app.config import RRF_K
 from app.models import SearchResponse, SearchResult
 from app.services.embedder import embed_query
-from app.services.fts import search_fts
+from app.services.fts import count_fts, search_fts
 from app.services.qdrant_store import collection_point_count, search_vector
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-# Hard ceiling on occurrences view to keep payloads bounded.
+# Hard ceilings keep broad queries from loading and serialising huge result sets.
+DOCUMENTS_HARD_CAP = 1000
+DOCUMENTS_DEFAULT_LIMIT = 200
 OCCURRENCES_HARD_CAP = 5000
-# Default per-page size when the client doesn't send `limit` in occurrences view.
+OCCURRENCES_PAGE_HARD_CAP = 1000
 OCCURRENCES_DEFAULT_LIMIT = 200
+SEARCH_CANDIDATE_HARD_CAP = 10000
 # Half-window (chars) of context built around each occurrence.
 SNIPPET_HALF_WINDOW = 120
 
@@ -191,10 +194,19 @@ def _annotate_and_filter(
 
 def _candidate_limit(limit: Optional[int], strict: bool, attempt: int = 0) -> Optional[int]:
     if limit is None:
-        return None
+        return SEARCH_CANDIDATE_HARD_CAP
     if not strict:
-        return limit * 2
-    return max(limit * (8 if attempt == 0 else 16), 50 if attempt == 0 else 100)
+        return min(limit * 2, SEARCH_CANDIDATE_HARD_CAP)
+    widened = max(limit * (8 if attempt == 0 else 16), 50 if attempt == 0 else 100)
+    return min(widened, SEARCH_CANDIDATE_HARD_CAP)
+
+
+def _effective_limit(view: str, limit: Optional[int]) -> int:
+    if view == "occurrences":
+        requested = limit if limit is not None else OCCURRENCES_DEFAULT_LIMIT
+        return min(requested, OCCURRENCES_PAGE_HARD_CAP)
+    requested = limit if limit is not None else DOCUMENTS_DEFAULT_LIMIT
+    return min(requested, DOCUMENTS_HARD_CAP)
 
 
 def _dedupe_hits(hits: Iterable[dict]) -> List[dict]:
@@ -245,6 +257,27 @@ def _recall_queries(q: str, branches: List[List[str]]) -> List[str]:
         if len(branch) == 1:
             queries.append(branch[0])
     return _unique_terms(queries)
+
+
+def _count_text_matches(
+    q: str,
+    branches: List[List[str]],
+    whole_word: bool,
+    match_case: bool,
+    path_prefixes: List[str],
+) -> Optional[int]:
+    """Return exact FTS chunk count for plain text searches.
+
+    Strict client-side filters need chunk text inspection, so their exact count
+    is intentionally left unknown instead of loading every matching row.
+    """
+    if whole_word or match_case or len(branches) != 1:
+        return None
+    try:
+        return count_fts(q, path_prefixes)
+    except Exception as exc:
+        logger.warning("FTS count failed for %r: %s", q, exc)
+        return None
 
 
 def _build_snippet(text: str, start: int, end: int) -> Tuple[str, int]:
@@ -325,7 +358,7 @@ async def search(
     logger.info(
         "Search: q=%r mode=%s view=%s whole_word=%s match_case=%s related=%s paths=%s limit=%s offset=%s",
         q, mode, view, whole_word, match_case, clean_related, clean_path_prefixes,
-        limit if limit is not None else "all", offset,
+        _effective_limit(view, limit), offset,
     )
 
     t0 = time.perf_counter()
@@ -338,7 +371,7 @@ async def search(
                 q, branches, whole_word, match_case, clean_related, clean_path_prefixes, limit, offset, t0
             )
         return _run_documents(
-            q, mode, branches, whole_word, match_case, clean_related, clean_path_prefixes, limit, t0
+            q, mode, branches, whole_word, match_case, clean_related, clean_path_prefixes, limit, offset, t0
         )
     except HTTPException:
         raise
@@ -362,8 +395,6 @@ def _search_fts_candidates(
 
     for attempt in range(attempts):
         candidate_limit = _candidate_limit(limit, strict, attempt)
-        if path_prefixes:
-            candidate_limit = None
         raw = _dedupe_hits(
             hit
             for query in _recall_queries(q, branches)
@@ -390,8 +421,8 @@ def _search_vector_candidates(
 
     for attempt in range(attempts):
         vector_limit = _candidate_limit(limit, strict, attempt)
-        if vector_limit is None or path_prefixes:
-            vector_limit = collection_point_count()
+        if path_prefixes:
+            vector_limit = min(collection_point_count(), vector_limit or SEARCH_CANDIDATE_HARD_CAP)
         raw = _dedupe_hits(
             hit
             for query in _recall_queries(q, branches)
@@ -413,27 +444,31 @@ def _run_documents(
     related_terms: List[str],
     path_prefixes: List[str],
     limit: Optional[int],
+    offset: int,
     t0: float,
 ) -> SearchResponse:
+    page_limit = _effective_limit("documents", limit)
+    probe_limit = min(offset + page_limit + 1, DOCUMENTS_HARD_CAP + 1)
+
     if mode in {"hybrid", "vector"}:
-        vector_hits = _search_vector_candidates(q, branches, whole_word, match_case, limit, path_prefixes)
+        vector_hits = _search_vector_candidates(q, branches, whole_word, match_case, probe_limit, path_prefixes)
     else:
         vector_hits = []
 
     if mode in {"hybrid", "keyword"}:
-        fts_hits = _search_fts_candidates(q, branches, whole_word, match_case, limit, path_prefixes)
+        fts_hits = _search_fts_candidates(q, branches, whole_word, match_case, probe_limit, path_prefixes)
     else:
         fts_hits = []
 
     if mode == "hybrid":
-        raw = _rrf_fuse(vector_hits, fts_hits, limit=limit)
+        raw = _rrf_fuse(vector_hits, fts_hits, limit=probe_limit)
         for r in raw:
             r.pop("rrf", None)
             r["mode"] = "hybrid"
-        results = raw
+        ranked = raw
     elif mode == "vector":
-        results = vector_hits if limit is None else vector_hits[:limit]
-        for r in results:
+        ranked = vector_hits[:probe_limit]
+        for r in ranked:
             r["mode"] = "vector"
     else:
         if fts_hits:
@@ -445,24 +480,34 @@ def _run_documents(
                 r["score"] = bm25
                 r["bm25_score"] = bm25
                 r["mode"] = "keyword"
-        results = fts_hits if limit is None else fts_hits[:limit]
+        ranked = fts_hits[:probe_limit]
 
-    total_occurrences = sum(r.get("occurrences_in_chunk", 0) for r in results)
-    total_documents = len({r.get("doc_id") for r in results})
+    bounded_ranked = ranked[:DOCUMENTS_HARD_CAP]
+    bounded_total = len(bounded_ranked)
+    known_total = (
+        _count_text_matches(q, branches, whole_word, match_case, path_prefixes)
+        if mode in {"hybrid", "keyword"} else None
+    )
+    total_chunks = known_total if known_total is not None else bounded_total
+    capped = offset + page_limit < total_chunks
+    page = bounded_ranked[offset : offset + page_limit]
+
+    total_occurrences = sum(r.get("occurrences_in_chunk", 0) for r in page)
+    total_documents = len({r.get("doc_id") for r in bounded_ranked})
     took_ms = (time.perf_counter() - t0) * 1000.0
 
     return SearchResponse(
         query=q,
         mode=mode,
         view="documents",
-        total=len(results),
-        results=[_to_result(r, mode) for r in results],
+        total=len(page),
+        results=[_to_result(r, mode) for r in page],
         total_occurrences=total_occurrences,
-        total_chunks=len(results),
+        total_chunks=total_chunks,
         total_documents=total_documents,
-        capped=False,
-        offset=0,
-        limit=limit,
+        capped=capped,
+        offset=offset,
+        limit=page_limit,
         took_ms=round(took_ms, 2),
         related_terms=related_terms,
     )
@@ -482,7 +527,9 @@ def _run_occurrences(
     if not branches:
         raise HTTPException(status_code=400, detail="Empty query")
 
-    fts_hits = _search_fts_candidates(q, branches, whole_word, match_case, None, path_prefixes)
+    page_limit = _effective_limit("occurrences", limit)
+    candidate_limit = min(SEARCH_CANDIDATE_HARD_CAP, max(OCCURRENCES_HARD_CAP, offset + page_limit + 1))
+    fts_hits = _search_fts_candidates(q, branches, whole_word, match_case, candidate_limit, path_prefixes)
 
     if fts_hits:
         best_abs = abs(fts_hits[0].get("rank", -1)) or 1.0
@@ -495,13 +542,13 @@ def _run_occurrences(
             r["semantic_score"] = 0.0
             r["mode"] = "keyword"
 
-    occurrences, capped = _iter_occurrences(fts_hits, OCCURRENCES_HARD_CAP)
+    occurrences, occurrence_capped = _iter_occurrences(fts_hits, OCCURRENCES_HARD_CAP)
+    capped = occurrence_capped or len(fts_hits) >= candidate_limit
 
     total_occurrences = len(occurrences)
     total_chunks = len({(r["doc_id"], r.get("chunk_index", 0)) for r in occurrences})
     total_documents = len({r["doc_id"] for r in occurrences})
 
-    page_limit = limit if limit is not None else OCCURRENCES_DEFAULT_LIMIT
     page = occurrences[offset : offset + page_limit]
 
     took_ms = (time.perf_counter() - t0) * 1000.0

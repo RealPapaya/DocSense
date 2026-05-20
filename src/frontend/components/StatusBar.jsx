@@ -3,7 +3,6 @@
 function StatusBar({ totalMs, mode, results, summary = {} }) {
   const T = useT();
   const isOcc = summary.view === 'occurrences';
-  const cap   = summary.capped ? '+' : '';
 
   return (
     <div className="statusbar">
@@ -17,12 +16,12 @@ function StatusBar({ totalMs, mode, results, summary = {} }) {
         <span className="item">
           {summary.totalDocuments || 0} {T('sb_docs')} ·
           {' '}{summary.totalChunks || 0} {T('sb_chunks')} ·
-          {' '}{summary.totalOccurrences || 0}{cap} {T('sb_matches')} ·
+          {' '}{summary.totalOccurrences || 0} {T('sb_matches')} ·
           {' '}{totalMs}ms
         </span>
       ) : (
         <span className="item">
-          {results.length} {T('sb_chunks')}
+          {summary.totalChunks || results.length} {T('sb_chunks')}
           {(summary.totalOccurrences || 0) > 0 && (
             <> · {summary.totalOccurrences} {T('sb_matches')}</>
           )}

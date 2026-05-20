@@ -1,5 +1,5 @@
 // ResultRow / OccurrenceRow / ResultsPanel - list of search results with
-// list header + load-more for occurrence view.
+// list header + automatic infinite loading.
 
 function ResultRow({ result, index, selected, onSelect, tagsData = { customTags: [], assignments: {} } }) {
   const T = useT();
@@ -54,7 +54,7 @@ function OccurrenceRow({ result, index, selected, onSelect }) {
 
 // Lightweight viewport-windowed list: render only rows near the scroll position
 // so 5,000-row lists stay snappy without a vendor library.
-function VirtualList({ items, rowHeight, renderRow, overscan = 24, className = '' }) {
+function VirtualList({ items, rowHeight, renderRow, overscan = 24, className = '', onNearEnd = () => {} }) {
   const ref = React.useRef(null);
   const [scrollTop, setScrollTop] = React.useState(0);
   const [viewport,  setViewport]  = React.useState(600);
@@ -62,14 +62,19 @@ function VirtualList({ items, rowHeight, renderRow, overscan = 24, className = '
   React.useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const onScroll = () => setScrollTop(el.scrollTop);
+    const onScroll = () => {
+      setScrollTop(el.scrollTop);
+      if (el.scrollHeight - el.scrollTop - el.clientHeight < rowHeight * 10) {
+        onNearEnd();
+      }
+    };
     const measure = () => setViewport(el.clientHeight || 600);
     measure();
     el.addEventListener('scroll', onScroll);
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => { el.removeEventListener('scroll', onScroll); ro.disconnect(); };
-  }, []);
+  }, [onNearEnd, rowHeight]);
 
   const total = items.length;
   const first = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
@@ -96,9 +101,41 @@ function ResultsPanel({
   view = 'documents', summary = {}, onLoadMore = () => {}, loadingMore = false,
 }) {
   const T = useT();
+  const documentListRef = React.useRef(null);
+  const documentSentinelRef = React.useRef(null);
   const isOccurrences = view === 'occurrences';
   const hasMore = isOccurrences
-    && (summary.totalOccurrences || 0) > results.length;
+    ? (summary.totalOccurrences || 0) > results.length
+    : !!summary.capped && results.length < Math.min(summary.totalChunks || 0, 1000);
+  const totalResultCount = isOccurrences
+    ? (summary.totalOccurrences || 0)
+    : (summary.totalChunks || results.length);
+  const triggerLoadMore = React.useCallback(() => {
+    if (hasMore && !loadingMore) onLoadMore();
+  }, [hasMore, loadingMore, onLoadMore]);
+  const onDocumentScroll = React.useCallback((e) => {
+    const el = e.currentTarget;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 260) {
+      triggerLoadMore();
+    }
+  }, [triggerLoadMore]);
+  React.useEffect(() => {
+    if (isOccurrences) return;
+    const root = documentListRef.current;
+    const sentinel = documentSentinelRef.current;
+    if (!root || !sentinel || !hasMore) return;
+
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries.some(entry => entry.isIntersecting)) {
+          triggerLoadMore();
+        }
+      },
+      { root, rootMargin: '360px 0px 360px 0px' },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [isOccurrences, hasMore, results.length, triggerLoadMore]);
 
   return (
     <section className="results">
@@ -107,13 +144,13 @@ function ResultsPanel({
           <span className="ct">
             <strong>{results.length}</strong>
             {' / '}
-            <strong>{summary.totalOccurrences || 0}{summary.capped ? '+' : ''}</strong>
+            <strong>{summary.totalOccurrences || 0}</strong>
             {' '}{T('matches_n')}
             {' · '}<strong>{totalMs}</strong> {T('results_ms')}
           </span>
         ) : (
           <span className="ct">
-            <strong>{results.length}</strong> {T('results_n')} · <strong>{totalMs}</strong> {T('results_ms')}
+            <strong>{totalResultCount}</strong> {T('results_n')} · <strong>{totalMs}</strong> {T('results_ms')}
           </span>
         )}
         <span className="spacer"></span>
@@ -139,6 +176,7 @@ function ResultsPanel({
             className="occ-list"
             items={results}
             rowHeight={36}
+            onNearEnd={triggerLoadMore}
             renderRow={(r, i) => (
               <OccurrenceRow
                 key={r.id}
@@ -149,20 +187,18 @@ function ResultsPanel({
               />
             )}
           />
-          {hasMore && (
-            <div className="loadmore-bar">
-              <button className="loadmore-btn" onClick={onLoadMore} disabled={loadingMore}>
-                {loadingMore ? T('loading_more') : T('load_more')}
-              </button>
-            </div>
-          )}
+          {loadingMore && <div className="autoload-status">{T('loading_more')}</div>}
         </>
       ) : (
-        <div className="result-list">
-          {results.map((r, i) => (
-            <ResultRow key={r.id} result={r} index={i} selected={r.id === selectedId} onSelect={onSelect} tagsData={tagsData} />
-          ))}
-        </div>
+        <>
+          <div className="result-list" ref={documentListRef} onScroll={onDocumentScroll}>
+            {results.map((r, i) => (
+              <ResultRow key={r.id} result={r} index={i} selected={r.id === selectedId} onSelect={onSelect} tagsData={tagsData} />
+            ))}
+            {hasMore && <div ref={documentSentinelRef} className="autoload-sentinel" />}
+            {loadingMore && <div className="autoload-status">{T('loading_more')}</div>}
+          </div>
+        </>
       )}
     </section>
   );

@@ -2,6 +2,9 @@
 // tweaks, bookmarks, view routing), data fetching (/api/search, /api/status),
 // preference persistence, and the resizable layout. Must load LAST.
 
+const SEARCH_PAGE_LIMIT = 200;
+const SEARCH_RESULT_LOAD_CAP = 1000;
+
 function App() {
   const saved = React.useMemo(loadPrefs, []);
 
@@ -247,9 +250,11 @@ function App() {
     });
     if (opts.view === 'documents') {
       params.set('mode', opts.mode === 'bm25' ? 'keyword' : opts.mode);
+      params.set('limit', String(opts.limit ?? SEARCH_PAGE_LIMIT));
+      params.set('offset', String(opts.offset ?? 0));
     } else {
       params.set('mode', 'keyword');
-      params.set('limit', String(opts.limit ?? 200));
+      params.set('limit', String(opts.limit ?? SEARCH_PAGE_LIMIT));
       params.set('offset', String(opts.offset ?? 0));
     }
     return '/api/search?' + params.toString();
@@ -290,8 +295,11 @@ function App() {
   }, [query, mode, searchView, wholeWord, matchCase, relatedTerms, searchPathPrefixes, buildSearchUrl]);
 
   const onLoadMore = React.useCallback(async () => {
-    if (loadingMore || searchView !== 'occurrences') return;
-    if (!summary.limit || results.length >= summary.totalOccurrences) return;
+    if (loadingMore) return;
+    const isOccurrences = searchView === 'occurrences';
+    if (!summary.limit) return;
+    if (isOccurrences && results.length >= summary.totalOccurrences) return;
+    if (!isOccurrences && results.length >= Math.min(summary.totalChunks || 0, SEARCH_RESULT_LOAD_CAP)) return;
     setLoadingMore(true);
     try {
       const nextOffset = results.length;
@@ -302,8 +310,19 @@ function App() {
       if (!res.ok) throw new Error('Server error ' + res.status);
       const data = await res.json();
       const startIdx = results.length;
-      const more = (data.results || []).map((r, i) => mapOccurrence(r, query, startIdx + i));
+      const mapFn = isOccurrences ? mapOccurrence : mapResult;
+      const more = (data.results || []).map((r, i) => mapFn(r, query, startIdx + i));
       setResults(prev => [...prev, ...more]);
+      setSummary(prev => ({
+        ...prev,
+        view: data.view || prev.view,
+        totalOccurrences: data.total_occurrences || prev.totalOccurrences || 0,
+        totalChunks:      data.total_chunks      || prev.totalChunks      || 0,
+        totalDocuments:   data.total_documents   || prev.totalDocuments   || 0,
+        capped:           !!data.capped,
+        offset:           data.offset || nextOffset,
+        limit:            data.limit  ?? prev.limit,
+      }));
     } catch(e) {
       setError(e.message);
     } finally {

@@ -95,6 +95,50 @@ def test_related_terms_expand_fts_candidate_queries(monkeypatch):
     assert [(h["doc_id"], h["match_positions"]) for h in hits] == [("related", [0])]
 
 
+def test_unlimited_candidate_searches_are_bounded(monkeypatch):
+    calls = []
+
+    def fake_search_fts(query, limit=None):
+        calls.append(limit)
+        return []
+
+    monkeypatch.setattr(search_route, "search_fts", fake_search_fts)
+
+    search_route._search_fts_candidates("bios", [["bios"]], False, False, None)
+
+    assert calls == [search_route.SEARCH_CANDIDATE_HARD_CAP]
+
+
+def test_documents_view_defaults_to_first_safe_page(monkeypatch):
+    hits = [
+        {**_hit("BIOS", f"d{i}", i), "score": 1.0 - (i / 1000)}
+        for i in range(search_route.DOCUMENTS_DEFAULT_LIMIT + 1)
+    ]
+
+    monkeypatch.setattr(search_route, "_search_vector_candidates", lambda *args, **kwargs: [])
+    monkeypatch.setattr(search_route, "_search_fts_candidates", lambda *args, **kwargs: hits)
+    monkeypatch.setattr(search_route, "count_fts", lambda *args, **kwargs: 34567)
+
+    response = search_route._run_documents(
+        "bios",
+        "keyword",
+        [["bios"]],
+        False,
+        False,
+        [],
+        [],
+        None,
+        0,
+        0.0,
+    )
+
+    assert response.total == search_route.DOCUMENTS_DEFAULT_LIMIT
+    assert len(response.results) == search_route.DOCUMENTS_DEFAULT_LIMIT
+    assert response.limit == search_route.DOCUMENTS_DEFAULT_LIMIT
+    assert response.capped is True
+    assert response.total_chunks == 34567
+
+
 def test_path_prefix_filter_keeps_only_matching_paths():
     hits = [
         _hit_at(r"D:\docs\alpha\a.pdf", doc_id="keep"),

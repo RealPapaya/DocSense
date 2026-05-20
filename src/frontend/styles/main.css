@@ -1080,6 +1080,9 @@ body {
 .result-list {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
+  background: var(--bg);
 }
 
 .result {
@@ -1091,6 +1094,8 @@ body {
   grid-template-columns: 44px 1fr;
   gap: 12px;
   transition: background 0.08s;
+  min-width: 0;
+  overflow: hidden;
 }
 .result:hover { background: var(--bg-hover); }
 .result.selected {
@@ -1118,6 +1123,7 @@ body {
   gap: 8px;
   margin-bottom: 4px;
   flex-wrap: wrap;
+  min-width: 0;
 }
 .file-type-icon {
   width: 24px;
@@ -1129,6 +1135,8 @@ body {
   font-size: 13px;
   color: var(--fg);
   letter-spacing: -0.005em;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .result-row1 .ver {
   font-family: var(--font-mono);
@@ -1147,6 +1155,7 @@ body {
   border-radius: 3px;
   background: var(--bg-soft);
   color: var(--score-good);
+  flex-shrink: 0;
 }
 .result-row1 .score-pill.mid { color: var(--score-mid); }
 .result-row1 .score-pill.low { color: var(--score-low); }
@@ -1196,6 +1205,9 @@ body {
   line-height: 1.5;
   color: var(--fg-muted);
   -webkit-font-smoothing: antialiased;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .result .excerpt mark, .preview-text mark {
   background: var(--hl-bg);
@@ -2510,6 +2522,8 @@ span.doc-tree-icon {
 .occ-list {
   flex: 1;
   font-size: 12.5px;
+  overflow-x: hidden !important;
+  background: var(--bg);
 }
 .occ-row {
   display: grid;
@@ -2562,32 +2576,24 @@ span.doc-tree-icon {
   border-radius: 2px;
 }
 
-/* ── Load-more bar at the bottom of occurrences list ─────────────────────── */
-.loadmore-bar {
-  padding: 10px 12px;
-  border-top: 1px solid var(--border);
-  display: flex; justify-content: center;
+/* ── Automatic loading indicator ─────────────────────────────────────────── */
+.autoload-status {
+  padding: 9px 12px;
+  color: var(--fg-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-align: center;
+  background: var(--bg);
 }
-.loadmore-btn {
-  font-size: 12px;
-  line-height: 1;
-  padding: 6px 14px;
-  border-radius: 6px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  color: var(--fg);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  white-space: nowrap;
+.autoload-sentinel {
+  height: 1px;
+  width: 100%;
+  background: transparent;
 }
-.loadmore-btn:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
+.result-list::-webkit-scrollbar-corner,
+.occ-list::-webkit-scrollbar-corner {
+  background: var(--bg);
 }
-.loadmore-btn:disabled { opacity: 0.6; cursor: progress; }
 
 /* ── Preview panel occurrence indicators ─────────────────────────────────── */
 .ctx-occ-pos, .ctx-occ-count {

@@ -205,6 +205,41 @@ def _like_fallback(tokens: List[str], limit: Optional[int] = None) -> List[Dict[
     return [dict(r) for r in rows]
 
 
+def _path_prefix_clause(path_prefixes: Optional[List[str]]) -> tuple[str, list]:
+    prefixes = [p.strip().replace("\\", "/").rstrip("/") for p in path_prefixes or [] if p.strip()]
+    if not prefixes:
+        return "", []
+    checks = []
+    params: list = []
+    for prefix in prefixes:
+        folded = prefix.casefold()
+        checks.append("(LOWER(REPLACE(d.filepath, char(92), '/')) = ? OR LOWER(REPLACE(d.filepath, char(92), '/')) LIKE ?)")
+        params.extend([folded, folded + "/%"])
+    return " AND (" + " OR ".join(checks) + ")", params
+
+
+def _like_fallback_count(tokens: List[str], path_prefixes: Optional[List[str]] = None) -> int:
+    where = " AND ".join(["c.text LIKE ?"] * len(tokens))
+    params: list = [f"%{t}%" for t in tokens]
+    path_sql, path_params = _path_prefix_clause(path_prefixes)
+    params.extend(path_params)
+    con = _conn()
+    try:
+        row = con.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM   chunks    c
+            JOIN   documents d ON c.doc_id = d.doc_id
+            WHERE  {where}
+            {path_sql}
+            """,
+            params,
+        ).fetchone()
+    finally:
+        con.close()
+    return int(row[0] if row else 0)
+
+
 def search_fts(query: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
     """
     Full-text search via FTS5 BM25.
@@ -249,6 +284,39 @@ def search_fts(query: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
     finally:
         con.close()
     return [dict(r) for r in rows]
+
+
+def count_fts(query: str, path_prefixes: Optional[List[str]] = None) -> int:
+    """Count matching chunks without fetching chunk text payloads."""
+    tokens = [t for t in query.split() if t]
+    if not tokens:
+        return 0
+
+    if any(len(t) < _TRIGRAM_MIN for t in tokens):
+        return _like_fallback_count(tokens, path_prefixes)
+
+    safe_query = _sanitize_fts_query(tokens)
+    path_sql, path_params = _path_prefix_clause(path_prefixes)
+    params: list = [safe_query, *path_params]
+    con = _conn()
+    try:
+        row = con.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM   chunks_fts
+            JOIN   chunks    c ON chunks_fts.rowid = c.id
+            JOIN   documents d ON c.doc_id = d.doc_id
+            WHERE  chunks_fts MATCH ?
+            {path_sql}
+            """,
+            params,
+        ).fetchone()
+    except sqlite3.OperationalError as exc:
+        logger.warning("FTS5 count failed for %r (sanitised: %r): %s", query, safe_query, exc)
+        return 0
+    finally:
+        con.close()
+    return int(row[0] if row else 0)
 
 
 def get_document_by_path(filepath: str) -> Optional[Dict[str, Any]]:
