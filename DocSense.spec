@@ -1,15 +1,24 @@
 # -*- mode: python ; coding: utf-8 -*-
+import platform as _platform
+_qdrant_bin = 'qdrant.exe' if _platform.system() == 'Windows' else 'qdrant'
 
 a = Analysis(
     ['start.py'],
     pathex=['src'],
-    binaries=[],
+    # Qdrant binary bundled at build time (scripts/download_qdrant.py).
+    # Destination '.' places it in _MEIPASS root, same level as app/ and frontend/.
+    binaries=[
+        (f'vendor/qdrant/{_qdrant_bin}', '.'),
+    ],
     datas=[
         # source path → bundled name under _MEIPASS (kept flat so frozen-mode
         # `from app.config import …` and `_MEIPASS / "frontend"` keep working)
         ('src/frontend', 'frontend'),
         ('src/app',      'app'),
         ('src/indexer',  'indexer'),
+        # fastembed model bundled at build time (scripts/download_model.py).
+        # Destination 'models' → _MEIPASS/models/ — matches MODEL_CACHE_DIR in config.py.
+        ('vendor/models', 'models'),
     ],
     hiddenimports=[
         'uvicorn', 'uvicorn.logging', 'uvicorn.loops', 'uvicorn.loops.auto',

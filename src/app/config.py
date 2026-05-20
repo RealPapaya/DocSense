@@ -42,6 +42,14 @@ QDRANT_VECTOR_SIZE = 384          # matches BAAI/bge-small-en-v1.5
 # ── Embedding model ───────────────────────────────────────────────────────────
 EMBED_MODEL = "BAAI/bge-small-en-v1.5"   # ~130 MB, ONNX, fast CPU inference
 
+# When frozen, the model is bundled in _MEIPASS/models/ (scripts/download_model.py
+# + DocSense.spec put it there).  In dev, None → fastembed uses its default cache
+# (~/.cache/fastembed), which is downloaded on first use.
+if getattr(sys, "frozen", False):
+    MODEL_CACHE_DIR: "Path | None" = Path(sys._MEIPASS) / "models"
+else:
+    MODEL_CACHE_DIR = None
+
 # ── Chunking ──────────────────────────────────────────────────────────────────
 # 1500 chars ≈ 350-500 tokens — comfortably under bge-small's 512-token limit
 # while giving each chunk enough semantic context. A 6 MB technical PDF chunks

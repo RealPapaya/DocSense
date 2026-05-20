@@ -105,6 +105,18 @@ def ensure_qdrant_binary() -> None:
         logger.info("Qdrant binary found: %s", QDRANT_BIN_PATH)
         return
 
+    # Frozen exe: copy the binary bundled by PyInstaller (no network needed).
+    if getattr(sys, "frozen", False):
+        bundled = Path(sys._MEIPASS) / QDRANT_BIN_NAME
+        if bundled.exists():
+            QDRANT_BIN_DIR.mkdir(parents=True, exist_ok=True)
+            logger.info("Copying bundled Qdrant binary …")
+            shutil.copy2(bundled, QDRANT_BIN_PATH)
+            if platform.system() != "Windows":
+                QDRANT_BIN_PATH.chmod(0o755)
+            logger.info("Qdrant binary ready: %s", QDRANT_BIN_PATH)
+            return
+
     QDRANT_BIN_DIR.mkdir(parents=True, exist_ok=True)
     tag, url = _latest_release_url()
     logger.info("Downloading Qdrant %s …", tag)
