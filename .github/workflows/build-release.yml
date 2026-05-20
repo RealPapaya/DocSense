@@ -1,0 +1,111 @@
+name: Build & Release (Windows EXE)
+
+# Triggers:
+#   1. Push a tag matching v*.*.* to automatically build and publish a release
+#      e.g.  git tag v1.0.0 && git push origin v1.0.0
+#   2. Manually via Actions → "Run workflow" (useful for testing the build)
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release tag to create (e.g. v1.0.0-test)"
+        required: false
+        default: "v0.0.0-dev"
+
+jobs:
+  build-windows:
+    name: Build Windows EXE
+    runs-on: windows-latest
+
+    steps:
+      # ── 1. Checkout ───────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Python setup ───────────────────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      # ── 3. Install runtime deps + PyInstaller ─────────────────────────────
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      # ── 4. Build with PyInstaller (uses existing DocSense.spec) ──────────
+      - name: Build with PyInstaller
+        run: pyinstaller DocSense.spec
+
+      # ── 5. Sanity-check the output ────────────────────────────────────────
+      - name: Verify build output
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist\DocSense\DocSense.exe")) {
+            Write-Error "DocSense.exe not found in dist\DocSense — build failed"
+            exit 1
+          }
+          Write-Host "Build output:"
+          Get-ChildItem dist\DocSense | Select-Object Name, Length | Format-Table
+
+      # ── 6. Compress dist/DocSense/ → DocSense-windows-x64.zip ────────────
+      - name: Package into zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist\DocSense -DestinationPath dist\DocSense-windows-x64.zip
+          $size = (Get-Item dist\DocSense-windows-x64.zip).Length / 1MB
+          Write-Host ("Zip size: {0:N1} MB" -f $size)
+
+      # ── 7. Resolve the release tag name ───────────────────────────────────
+      #    • tag push   → use github.ref_name  (e.g. "v1.2.3")
+      #    • manual run → use the workflow_dispatch input
+      - name: Resolve release tag
+        id: tag
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $tagName = "${{ github.event.inputs.tag_name }}"
+          } else {
+            $tagName = "${{ github.ref_name }}"
+          }
+          echo "name=$tagName" >> $env:GITHUB_OUTPUT
+          Write-Host "Release tag: $tagName"
+
+      # ── 8. Create GitHub Release and upload the zip ───────────────────────
+      #    Uses the built-in GITHUB_TOKEN — no extra secrets required.
+      #    Tags containing "-" (e.g. v1.0.0-beta) are marked as pre-release.
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          name: "DocSense ${{ steps.tag.outputs.name }}"
+          body: |
+            ## DocSense ${{ steps.tag.outputs.name }} — Windows 64-bit
+
+            ### How to install
+            1. Download **`DocSense-windows-x64.zip`** below
+            2. Extract to any folder
+            3. Double-click **`DocSense.exe`** to launch
+
+            ### First-run downloads (one-time, internet required)
+            | Asset | Size | Notes |
+            |-------|------|-------|
+            | Qdrant binary | ~35 MB | downloaded to `data/qdrant_bin/` |
+            | ONNX embedding model | ~130 MB | cached by fastembed |
+
+            After the first run the application is **fully offline**.
+
+            ### System requirements
+            - Windows 10 / 11 (x86-64)
+            - No Python, Docker, or any other software needed
+          files: dist/DocSense-windows-x64.zip
+          draft: false
+          prerelease: ${{ contains(steps.tag.outputs.name, '-') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
