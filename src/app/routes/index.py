@@ -439,14 +439,57 @@ async def get_chunks(doc_id: str):
     }
 
 
+def _open_docx_at_page(path: Path, page: int) -> bool:
+    if page <= 0 or os.name != "nt":
+        return False
+
+    try:
+        import base64
+        import shutil
+        import subprocess
+
+        powershell = shutil.which("powershell") or shutil.which("powershell.exe")
+        if not powershell:
+            return False
+
+        quoted_path = str(path).replace("'", "''")
+        script = f"""
+$ErrorActionPreference = 'Stop'
+$word = New-Object -ComObject Word.Application
+$word.Visible = $true
+$doc = $word.Documents.Open('{quoted_path}')
+$doc.Activate()
+$null = $word.Selection.GoTo(1, 1, {int(page)})
+$word.Activate()
+"""
+        encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        subprocess.Popen(
+            [
+                powershell,
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-EncodedCommand",
+                encoded,
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=creationflags,
+        )
+        return True
+    except Exception:
+        logger.exception("Failed to open DOCX at page %s: %s", page, path)
+        return False
+
+
 @router.post("/open/{doc_id}")
 async def open_file_native(doc_id: str, page: int = Query(0)):
     """Open a non-PDF file with the OS default application.
 
-    For .docx files on Windows, if *page* > 0 and WINWORD.EXE is available,
-    Word is launched with the ``/n /t <page>`` flags so the document opens
-    directly at the requested page.  Falls back to ``os.startfile`` when Word
-    is not found or the platform is not Windows.
+    For .docx files on Windows, if *page* > 0, Word is automated through
+    PowerShell COM so the document opens directly at the requested page.
+    Falls back to ``os.startfile`` when that path is not available.
     """
     con = sqlite3.connect(str(DB_PATH))
     try:
@@ -463,15 +506,8 @@ async def open_file_native(doc_id: str, page: int = Query(0)):
     if not path.is_file():
         raise HTTPException(status_code=410, detail="file no longer on disk")
 
-    # On Windows, open .docx at the requested page via WINWORD /n /t <page>.
-    if path.suffix.lower() == ".docx" and page > 0 and os.name == "nt":
-        import shutil
-        import subprocess
-        winword = shutil.which("WINWORD") or shutil.which("winword")
-        if winword:
-            subprocess.Popen([winword, str(path), "/n", "/t", str(page)])
-            return JSONResponse({"status": "ok", "page": page})
-        # WINWORD not on PATH — fall through to os.startfile
+    if path.suffix.lower() == ".docx" and _open_docx_at_page(path, page):
+        return JSONResponse({"status": "ok", "page": page})
 
     os.startfile(str(path))
     return JSONResponse({"status": "ok"})

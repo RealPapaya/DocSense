@@ -349,6 +349,48 @@ def wait_for_api(timeout_s: int = 180) -> bool:
         sys.stdout.flush()
 
 
+def run_with_spinner(label: str, fn: Callable[[], None]) -> None:
+    """Run a blocking action while keeping a one-line spinner alive."""
+    done = threading.Event()
+    errors: List[BaseException] = []
+
+    def _worker() -> None:
+        try:
+            fn()
+        except BaseException as exc:
+            errors.append(exc)
+        finally:
+            done.set()
+
+    threading.Thread(target=_worker, daemon=True).start()
+    start = time.monotonic()
+    frame = 0
+
+    sys.stdout.write(_ansi("\033[?25l"))
+    try:
+        while not done.is_set():
+            spin = SPIN_FRAMES[frame % len(SPIN_FRAMES)]
+            elapsed = int(time.monotonic() - start)
+            line = f"  {violet(spin)} {bold(label)}  {dim(f'({elapsed}s)')}"
+            if USE_COLOR:
+                sys.stdout.write("\r\033[2K" + line)
+            else:
+                sys.stdout.write("\r" + line.ljust(78))
+            sys.stdout.flush()
+            frame += 1
+            time.sleep(0.12)
+        if USE_COLOR:
+            sys.stdout.write("\r\033[2K")
+        else:
+            sys.stdout.write("\r" + " " * 78 + "\r")
+    finally:
+        sys.stdout.write(_ansi("\033[?25h"))
+        sys.stdout.flush()
+
+    if errors:
+        raise errors[0]
+
+
 # ─── Menu ────────────────────────────────────────────────────────────────────
 def server_state_badge() -> str:
     if api_responding(timeout=0.3):
@@ -475,13 +517,16 @@ def action_start() -> None:
 
 
 def action_restart() -> None:
-    print(f"\n  {violet('◉')} Restarting DocSense…\n")
-    stop_server()
-    # Give Windows a moment to release the sockets.
-    for _ in range(20):
-        if not port_listening() and not port_listening(6333):
-            break
-        time.sleep(0.1)
+    def _stop_and_release() -> None:
+        stop_server()
+        # Give Windows a moment to release the sockets.
+        for _ in range(20):
+            if not port_listening() and not port_listening(6333):
+                break
+            time.sleep(0.1)
+
+    print()
+    run_with_spinner("Restarting DocSense...", _stop_and_release)
     action_start()
 
 

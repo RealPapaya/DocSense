@@ -9,12 +9,14 @@ a token-budget limit when embedding.
 """
 from __future__ import annotations
 from pathlib import Path
-from typing import Callable, List, Dict, Any, Optional
+from typing import Callable, List, Dict, Any, Optional, Iterable
 
 from app.config import CHUNK_SIZE, CHUNK_OVERLAP
 
 # Callback invoked as on_page(done_pages, total_pages) during PDF extraction.
 PageCallback = Optional[Callable[[int, int], None]]
+W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+W = f"{{{W_NS}}}"
 
 
 # ── Chunker ───────────────────────────────────────────────────────────────────
@@ -60,9 +62,70 @@ def _extract_pdf(path: Path, on_page: PageCallback = None) -> List[Dict[str, Any
 
 def _extract_docx(path: Path) -> List[Dict[str, Any]]:
     from docx import Document
-    doc  = Document(str(path))
-    text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
-    return [{"text": c, "page": None} for c in _chunk(text)]
+    doc = Document(str(path))
+
+    pages: dict[int, List[str]] = {}
+    page = 1
+    for block in _iter_docx_text_blocks(doc):
+        page, segments = _docx_segments_for_page(block, page)
+        for segment_page, text in segments:
+            if text.strip():
+                pages.setdefault(segment_page, []).append(text.strip())
+        if _docx_paragraph_starts_next_page(block):
+            page += 1
+
+    results: List[Dict[str, Any]] = []
+    for page_num, parts in pages.items():
+        for chunk in _chunk("\n".join(parts)):
+            results.append({"text": chunk, "page": page_num})
+    return results
+
+
+def _iter_docx_text_blocks(doc: Any) -> Iterable[Any]:
+    """Yield paragraphs in document order, including paragraphs inside tables."""
+    for child in doc.element.body.iterchildren():
+        if child.tag == W + "p":
+            yield child
+        elif child.tag == W + "tbl":
+            yield from child.iter(W + "p")
+
+
+def _docx_segments_for_page(element: Any, page: int) -> tuple[int, List[tuple[int, str]]]:
+    """Split a DOCX paragraph into text segments keyed by Word page breaks."""
+    segments: List[tuple[int, str]] = []
+    buf: List[str] = []
+
+    def flush() -> None:
+        text = "".join(buf).strip()
+        if text:
+            segments.append((page, text))
+        buf.clear()
+
+    for node in element.iter():
+        if node.tag == W + "lastRenderedPageBreak":
+            flush()
+            page += 1
+        elif node.tag == W + "br" and node.get(W + "type") == "page":
+            flush()
+            page += 1
+        elif node.tag == W + "tab":
+            buf.append("\t")
+        elif node.tag in (W + "cr", W + "br"):
+            buf.append("\n")
+        elif node.tag == W + "t" and node.text:
+            buf.append(node.text)
+
+    flush()
+    return page, segments
+
+
+def _docx_paragraph_starts_next_page(element: Any) -> bool:
+    sect_pr = element.find(f"./{W}pPr/{W}sectPr")
+    if sect_pr is None:
+        return False
+    section_type = sect_pr.find(f"./{W}type")
+    value = section_type.get(W + "val") if section_type is not None else None
+    return value in (None, "nextPage", "oddPage", "evenPage")
 
 
 def _extract_xlsx(path: Path) -> List[Dict[str, Any]]:

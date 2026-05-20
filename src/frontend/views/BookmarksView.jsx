@@ -39,6 +39,13 @@ function BookmarksView({ bookmarks, setBookmarks, onBack }) {
 
   const openItem = (b) => {
     if (!b.doc_id) return;
+    const fp = b.filepath || b.filename || '';
+    const isPdf = fp.toLowerCase().endsWith('.pdf');
+    if (!isPdf) {
+      const pageParam = b.page ? '?page=' + b.page : '';
+      fetch('/api/open/' + encodeURIComponent(b.doc_id) + pageParam, { method: 'POST' });
+      return;
+    }
     const hash = b.page ? '#page=' + b.page : '';
     window.open('/api/file/' + encodeURIComponent(b.doc_id) + hash, '_blank', 'noopener');
   };

@@ -191,7 +191,7 @@ function PreviewPanel({ result, results = [], onSelect, bookmarks = {}, setBookm
     return '/api/file/' + encodeURIComponent(result.doc_id) + q + hash;
   };
 
-    const openFile = () => {
+  const openFile = () => {
     const fp = result.filepath || '';
     const isPdf = fp.toLowerCase().endsWith('.pdf');
     if (isPdf) {
