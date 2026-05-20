@@ -44,14 +44,7 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      # ── 4. Pre-download Qdrant binary and fastembed model into vendor/ ──────
-      - name: Download Qdrant binary
-        run: python scripts/download_qdrant.py
-
-      - name: Download fastembed model
-        run: python scripts/download_model.py
-
-      # ── 5. Build with PyInstaller (uses existing DocSense.spec) ──────────
+      # ── 4. Build with PyInstaller (uses existing DocSense.spec) ──────────
       - name: Build with PyInstaller
         run: pyinstaller DocSense.spec
 
@@ -105,10 +98,13 @@ jobs:
             2. Extract to any folder
             3. Double-click **`DocSense.exe`** to launch
 
-            ### No first-run downloads required
-            Qdrant binary (~35 MB) and the ONNX embedding model (~130 MB) are
-            bundled inside the zip.  The application is **fully offline** from
-            the first launch.
+            ### First-run downloads (one-time, internet required)
+            | Asset | Size | Notes |
+            |-------|------|-------|
+            | Qdrant binary | ~35 MB | downloaded to `data/qdrant_bin/` |
+            | ONNX embedding model | ~130 MB | cached by fastembed |
+
+            After the first run the application is **fully offline**.
 
             ### System requirements
             - Windows 10 / 11 (x86-64)

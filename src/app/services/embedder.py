@@ -15,7 +15,7 @@ import os
 import threading
 from typing import Callable, List, Optional
 
-from app.config import EMBED_MODEL, MODEL_CACHE_DIR
+from app.config import EMBED_MODEL
 
 _model = None
 _model_lock = threading.Lock()
@@ -60,10 +60,7 @@ def _get_model():
             return _model
         from fastembed import TextEmbedding
         threads = _resolve_threads()
-        kwargs = {"model_name": EMBED_MODEL, "threads": threads}
-        if MODEL_CACHE_DIR is not None:
-            kwargs["cache_dir"] = str(MODEL_CACHE_DIR)
-        _model = TextEmbedding(**kwargs)
+        _model = TextEmbedding(model_name=EMBED_MODEL, threads=threads)
         _model_threads = threads
     return _model
 
