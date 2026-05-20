@@ -799,9 +799,17 @@ body {
   border-right: none;
   background: var(--bg-elev);
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 4px 0;
+  min-width: 0;
 }
-.fgroup { padding: 12px 14px 4px; border-bottom: 1px dashed var(--border); }
+.fgroup {
+  padding: 12px 14px 4px;
+  border-bottom: 1px dashed var(--border);
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
 .fgroup:last-child { border-bottom: none; }
 .fgroup-title {
   font-family: var(--font-mono);
@@ -852,7 +860,13 @@ body {
 }
 .fitem .checkbox svg { display: none; }
 .fitem.on .checkbox svg { display: block; }
-.fitem .label { flex: 1; }
+.fitem .label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .fitem .count {
   font-family: var(--font-mono);
   font-size: 10.5px;
@@ -923,6 +937,11 @@ body {
   color: var(--fg-faint);
   padding: 4px 0;
 }
+.exf-node {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
 .exf-row {
   display: flex;
   align-items: center;
@@ -933,6 +952,9 @@ body {
   font-size: 12.5px;
   color: var(--fg);
   user-select: none;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 .exf-row:hover { background: var(--bg-soft); }
 .exf-row.excluded {
@@ -968,6 +990,7 @@ body {
   font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--fg-faint);
+  flex-shrink: 0;
 }
 .exf-row.excluded .exf-label .count { color: var(--fg-faint); }
 .exf-folder-ico {
@@ -1582,6 +1605,10 @@ body {
 .result-list::-webkit-scrollbar-thumb:hover,
 .preview-body::-webkit-scrollbar-thumb:hover,
 .filters-rail::-webkit-scrollbar-thumb:hover { background: var(--fg-faint); background-clip: padding-box; }
+.filters-rail::-webkit-scrollbar-corner,
+.preview-body::-webkit-scrollbar-corner {
+  background: var(--bg-elev);
+}
 
 /* Responsive squeezing */
 @media (max-width: 1280px) {
@@ -1810,21 +1837,47 @@ body {
 }
 .docs-view-toggle button.on { background: var(--bg-soft); color: var(--accent); }
 .docs-view-toggle button svg { width: 13px; height: 13px; }
-.docs-body { flex: 1; overflow-y: auto; }
-.docs-body::-webkit-scrollbar { width: 10px; }
+.docs-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
+}
+.docs-body::-webkit-scrollbar { width: 10px; height: 10px; }
 .docs-body::-webkit-scrollbar-track { background: transparent; }
 .docs-body::-webkit-scrollbar-thumb {
   background: var(--border-strong); border-radius: 5px;
   border: 2px solid var(--bg); background-clip: padding-box;
 }
+.docs-body::-webkit-scrollbar-corner { background: var(--bg); }
+.docs-tag-sidebar {
+  min-width: 0;
+}
+.docs-tag-sidebar::-webkit-scrollbar { width: 10px; height: 10px; }
+.docs-tag-sidebar::-webkit-scrollbar-track { background: transparent; }
+.docs-tag-sidebar::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 5px;
+  border: 2px solid var(--bg-elev);
+  background-clip: padding-box;
+}
+.docs-tag-sidebar::-webkit-scrollbar-corner { background: var(--bg-elev); }
 
 /* Explorer tree */
-.explorer-root { padding: 4px 0; }
+.explorer-root {
+  padding: 4px 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
 .explorer-folder-row {
   display: flex; align-items: center; gap: 7px;
   padding: 5px 14px; cursor: pointer;
   font-size: 12.5px; font-weight: 500; color: var(--fg);
   user-select: none; transition: background 0.08s;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 .explorer-folder-row:hover { background: var(--bg-hover); }
 .explorer-folder-row .caret {
@@ -1835,11 +1888,21 @@ body {
 .explorer-folder-row .folder-count {
   margin-left: auto;
   font-family: var(--font-mono); font-size: 10.5px; color: var(--fg-faint);
+  flex-shrink: 0;
+}
+.explorer-folder-row > span:not(.folder-count) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .explorer-children {
   padding-left: 16px;
   border-left: 1px solid var(--border);
   margin-left: 22px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 .explorer-file-row {
   display: flex; align-items: center; gap: 8px;
@@ -1848,6 +1911,8 @@ body {
   transition: background 0.08s; position: relative;
   isolation: isolate;
   overflow: hidden;
+  min-width: 0;
+  max-width: 100%;
 }
 .explorer-file-row:hover { background: var(--bg-hover); color: var(--fg); }
 .explorer-file-row.indexing {

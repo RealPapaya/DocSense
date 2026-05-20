@@ -953,7 +953,7 @@ function DocumentsView({ onBack, tagsData, setTagsData, watchedDir, watchedDirs,
 
             <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
         {/* Left tag sidebar */}
-        <div style={{ width: sidebarW + 'px', flexShrink: 0, borderRight: 'none', background: 'var(--bg-elev)', overflowY: 'auto', padding: '4px 0' }}>
+        <div className="docs-tag-sidebar" style={{ width: sidebarW + 'px', flexShrink: 0, borderRight: 'none', background: 'var(--bg-elev)', overflowY: 'auto', overflowX: 'hidden', padding: '4px 0' }}>
           <div className="fgroup">
             <div className="fgroup-title"><span>{T('docs_tag_mode')}</span></div>
             <div className="tag-mode-toggle">
